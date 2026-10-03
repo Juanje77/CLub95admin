@@ -10,6 +10,7 @@ import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError } from "../services/common";
+import { addMemberPrice, adjustMember, createMember, registerPayment, setAttendance, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
@@ -249,5 +250,55 @@ export async function removeExtraIncome(p: { id: string }) {
   return run(async (actor) => {
     await deleteExtraIncome(db, { actor, ...p });
     return "Ingreso borrado.";
+  });
+}
+
+// --- Socios (membresías) ------------------------------------------------------------------------------------------------------
+
+export async function toggleAttendance(p: { memberId: string; date: string; present: boolean }) {
+  return run(async (actor) => {
+    await setAttendance(db, { actor, ...p });
+  });
+}
+
+export async function saveMember(p: { name: string; serviceType: string; userId: string | null; price: number | null; phone: string; note: string }) {
+  return run(async (actor) => {
+    await createMember(db, { actor, ...p, price: p.price ? int(p.price) : undefined });
+    return "Socio agregado.";
+  });
+}
+
+export async function editMember(p: { id: string; name: string; userId: string | null; serviceType: string; phone: string; active: boolean }) {
+  return run(async (actor) => {
+    await updateMember(db, { actor, ...p });
+    return "Socio actualizado.";
+  });
+}
+
+export async function saveMemberPrice(p: { memberId: string; validFrom: string; price: number }) {
+  return run(async (actor) => {
+    await addMemberPrice(db, { actor, ...p, price: int(p.price) });
+    return "Precio guardado.";
+  });
+}
+
+export async function saveMemberPayment(p: { memberId: string; date: string; amount: number; method: string; note: string }) {
+  return run(async (actor) => {
+    await registerPayment(db, { actor, ...p, amount: int(p.amount) });
+    return "Cobro registrado.";
+  });
+}
+
+export async function saveMemberAdjustment(p: { memberId: string; date: string; amount: number; reason: string }) {
+  return run(async (actor) => {
+    await adjustMember(db, { actor, ...p, amount: Number(p.amount) });
+    return "Ajuste registrado.";
+  });
+}
+
+export async function voidMemberEntry(p: { id: string; reason: string }) {
+  return run(async (actor) => {
+    await voidLedgerEntry(db, { actor, ...p });
+    return "Movimiento anulado.";
   });
 }

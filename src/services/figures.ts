@@ -57,6 +57,14 @@ export async function getDayFigures(db: Db, date: string): Promise<DayFigures> {
     }
   }
 
+  // Los cobros de socios (membresías) registrados ese día entran a la caja del día.
+  const memberPayments = await db.memberLedger.findMany({ where: { date, kind: "PAGO", deletedAt: null } });
+  for (const mp of memberPayments) {
+    expectedIncome += mp.credit;
+    if (mp.method === "EFECTIVO") cash += mp.credit;
+    else transfers += mp.credit;
+  }
+
   let labor = 0;
   if (byBarber.size > 0) {
     const day = computeDay({

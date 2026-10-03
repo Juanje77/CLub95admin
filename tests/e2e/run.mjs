@@ -118,6 +118,39 @@ await shot("alertas");
 
 page.on("dialog", (d) => d.accept());
 
+// 9a. Socios (admin): alta, asistencia, cobro y ajuste
+await page.getByRole("link", { name: "Socios" }).click();
+await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+await page.locator("summary", { hasText: "Agregar un socio" }).click();
+const memberForm = page.locator("details", { hasText: "Agregar un socio" }).locator("form");
+await memberForm.getByLabel("Nombre", { exact: true }).fill("Matías Arrue");
+await memberForm.getByLabel("Tipo de plan").selectOption("CORTE_BARBA");
+await memberForm.getByLabel("Barbero asignado").selectOption({ label: "Jere" });
+await memberForm.getByRole("button", { name: "Agregar socio" }).click();
+await page.getByText("Socio agregado.").waitFor();
+const att = (date) => page.locator(`button[data-att="Matías Arrue|${date}"]`);
+await att(TODAY).click();
+await page.waitForFunction(([d]) => document.querySelector(`button[data-att="Matías Arrue|${d}"]`)?.getAttribute("aria-pressed") === "true", [TODAY]);
+await att(YESTERDAY).click();
+await page.waitForFunction(([d]) => document.querySelector(`button[data-att="Matías Arrue|${d}"]`)?.getAttribute("aria-pressed") === "true", [YESTERDAY]);
+check(true, "el admin marca la asistencia de hoy y de un día pasado");
+await page.waitForFunction(() => /33\.000/.test(document.querySelector("table.grid")?.textContent ?? ""));
+check(true, "2 visitas × $ 16.500 = $ 33.000 a cobrar");
+await page.getByRole("link", { name: "Matías Arrue" }).click();
+await page.getByRole("region", { name: /Cuenta de Matías Arrue/ }).waitFor();
+const panel = page.getByRole("region", { name: /Cuenta de Matías Arrue/ });
+await panel.getByLabel("Monto ($)", { exact: true }).first().fill("20000");
+await panel.getByRole("button", { name: "Registrar cobro" }).click();
+await panel.getByText("Debe $ 13.000").waitFor();
+check(true, "un cobro baja la deuda: debe $ 13.000");
+await panel.locator("summary", { hasText: "Ajuste manual" }).click();
+await panel.getByLabel(/Monto \(\$; con −/).fill("-1000");
+await panel.getByLabel(/Motivo \(obligatorio\)/).fill("Descuento por demora");
+await panel.getByRole("button", { name: "Guardar ajuste" }).click();
+await panel.getByText("Debe $ 12.000").waitFor();
+check(true, "el ajuste manual con motivo se refleja en el saldo: debe $ 12.000");
+await shot("socios");
+
 // 9. Gastos (admin): gasto fijo vencido, foto de comprobante, filtro, borrado y otros ingresos
 const jpegPath = join(tmpdir(), "comprobante.jpg");
 writeFileSync(jpegPath, Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==", "base64"));
@@ -201,6 +234,17 @@ await page.waitForURL(/login/);
 await login("jere", newPin);
 await page.waitForURL(BASE + "/");
 check(true, "el barbero entra con el PIN que le generó el admin");
+
+// 11. Socios vistos por un barbero: solo hoy, sin importes
+await page.getByRole("link", { name: "Socios" }).click();
+await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+check((await att(YESTERDAY).isDisabled()) && !(await att(TODAY).isDisabled()), "el barbero solo puede marcar la asistencia de hoy");
+check(!(await page.locator("table.grid").innerText()).includes("A cobrar"), "el barbero no ve los importes de los socios");
+await att(TODAY).click();
+await page.waitForFunction(([d]) => document.querySelector(`button[data-att="Matías Arrue|${d}"]`)?.getAttribute("aria-pressed") === "false", [TODAY]);
+await att(TODAY).click();
+await page.waitForFunction(([d]) => document.querySelector(`button[data-att="Matías Arrue|${d}"]`)?.getAttribute("aria-pressed") === "true", [TODAY]);
+check(true, "el barbero destilda y vuelve a tildar su propia asistencia");
 
 await browser.close();
 console.log("\nTODO OK — capturas en " + SHOTS);

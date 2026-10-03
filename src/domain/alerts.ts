@@ -22,6 +22,8 @@ export type AlertCode =
   | "RETIRO_EFECTIVO_EXCEDE"
   | "STOCK_BAJO"
   | "GASTO_FIJO_PENDIENTE"
+  | "SOCIO_CON_DEUDA"
+  | "SOCIO_SIN_VENIR"
   | "LIQUIDACION_PENDIENTE";
 
 export interface CloseAlert {
@@ -55,6 +57,10 @@ export interface AlertSettings {
   settlementErrorDay: number;
   /** Primer día que se controla (fecha de arranque del sistema). Los días anteriores no generan alertas. */
   startDate: string | null;
+  /** Días sin venir a partir de los cuales se avisa de un socio. */
+  memberInactiveDays: number;
+  /** Día del mes desde el cual la deuda del mes anterior de un socio se considera vencida. */
+  memberDebtDay: number;
 }
 
 export const DEFAULT_ALERT_SETTINGS: AlertSettings = {
@@ -68,6 +74,8 @@ export const DEFAULT_ALERT_SETTINGS: AlertSettings = {
   cashShareMinTotal: 50000,
   settlementErrorDay: 10,
   startDate: null,
+  memberInactiveDays: 30,
+  memberDebtDay: 10,
 };
 
 export interface DayState {
@@ -114,6 +122,9 @@ export interface AlertInput {
   lowStock?: { name: string; stock: number; minStock: number }[];
   /** Gastos fijos del mes cuyo día de vencimiento ya pasó y todavía no se cargaron. */
   recurringDue?: { id: string; concept: string; dayOfMonth: number; month: string }[];
+  /** Socios con deuda de meses anteriores vencida, y socios que hace mucho no vienen. */
+  memberDebts?: { id: string; name: string; amount: number }[];
+  memberInactive?: { id: string; name: string; days: number }[];
   settings?: Partial<AlertSettings>;
 }
 
@@ -285,6 +296,20 @@ export function computeCloseAlerts(input: AlertInput): CloseAlert[] {
     add({
       key: `GASTO_FIJO_PENDIENTE:${r.month}:${r.id}`, code: "GASTO_FIJO_PENDIENTE", severity: "WARN", audience: ["ADMIN", "DUENO"],
       message: `Falta cargar ${r.concept} de ${monthLabel(r.month)} (vencía el día ${r.dayOfMonth}).`,
+    });
+  }
+
+  // --- Socios ---
+  for (const m of input.memberDebts ?? []) {
+    add({
+      key: `SOCIO_CON_DEUDA:${m.id}`, code: "SOCIO_CON_DEUDA", severity: "WARN", audience: ["ADMIN", "DUENO"],
+      message: `${m.name} tiene una deuda vencida de ${formatARS(m.amount)} de meses anteriores.`,
+    });
+  }
+  for (const m of input.memberInactive ?? []) {
+    add({
+      key: `SOCIO_SIN_VENIR:${m.id}`, code: "SOCIO_SIN_VENIR", severity: "INFO", audience: ["ADMIN", "DUENO"],
+      message: `${m.name} no viene hace ${m.days} días.`,
     });
   }
 

@@ -4,6 +4,7 @@ import { settle } from "../domain/settlement";
 import type { ServiceCounts, ServiceType } from "../domain/types";
 import { audit, DomainError, isAdmin, type Actor } from "./common";
 import { loadPricing } from "./figures";
+import { membershipLaborFor } from "./members";
 
 function monthRange(period: string) {
   return { gte: `${period}-01`, lte: `${period}-31` };
@@ -12,7 +13,7 @@ function monthRange(period: string) {
 /**
  * Compensación de fin de mes de un barbero: lo que le corresponde (servicios + membresías + ajustes)
  * contra lo que ya cobró (retiros en efectivo + transferencias a su cuenta propia). Deja un borrador editable.
- * `laborMembership` se carga a mano hasta que esté el módulo de membresías.
+ * La parte de membresías se calcula sola desde la asistencia de socios (se puede pisar con `laborMembership`).
  */
 export async function computeSettlement(db: PrismaClient, p: { userId: string; period: string; laborMembership?: number; adjustments?: number; note?: string }) {
   const existing = await db.barberSettlement.findUnique({ where: { userId_period: { userId: p.userId, period: p.period } } });
@@ -41,7 +42,8 @@ export async function computeSettlement(db: PrismaClient, p: { userId: string; p
     });
     ownTransfers = lines.reduce((a, l) => a + l.amount, 0);
   }
-  const laborMembership = p.laborMembership ?? existing?.laborMembership ?? 0;
+  // Lo que le toca por los socios que atendió sale de la asistencia; se puede pisar a mano pasando `laborMembership`.
+  const laborMembership = p.laborMembership ?? (await membershipLaborFor(db, p.userId, p.period));
   const adjustments = p.adjustments ?? existing?.adjustments ?? 0;
   const collected = cashTaken + ownTransfers;
   const result = settle({ laborServices, laborMembership, adjustments, collected });

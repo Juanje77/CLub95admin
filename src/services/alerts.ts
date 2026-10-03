@@ -4,6 +4,7 @@ import type { BoxKind } from "../domain/cashbox";
 import { todayBA } from "../domain/money";
 import { getDayCoverage } from "./figures";
 import { recurringStatus } from "./expenses";
+import { memberAlertData } from "./members";
 
 export async function loadAlertSettings(db: PrismaClient): Promise<AlertSettings> {
   const row = await db.setting.findUnique({ where: { key: "alerts" } });
@@ -88,7 +89,9 @@ export async function syncAlerts(db: PrismaClient, opts: { now?: Date; windowDay
   const month = today.slice(0, 7);
   const recurringDue = (await recurringStatus(db, month, now)).filter((r) => r.due).map((r) => ({ id: r.id, concept: r.concept, dayOfMonth: r.dayOfMonth, month }));
 
-  const alerts = computeCloseAlerts({ now, days, closedDays, box, settlements, settings, lowStock, recurringDue });
+  const members = await memberAlertData(db, now, { inactiveDays: settings.memberInactiveDays, debtDay: settings.memberDebtDay });
+
+  const alerts = computeCloseAlerts({ now, days, closedDays, box, settlements, settings, lowStock, recurringDue, memberDebts: members.debts, memberInactive: members.inactive });
 
   const keys = new Set(alerts.map((a) => a.key));
   for (const a of alerts) {

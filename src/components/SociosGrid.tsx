@@ -1,0 +1,254 @@
+"use client";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { editMember, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, toggleAttendance, voidMemberEntry } from "../app/actions";
+import { formatARS, formatDate, monthLabel } from "../domain/money";
+import type { MemberRow, MembersMonth } from "../services/members";
+import { useAction } from "./useAction";
+
+const WD = ["D", "L", "M", "M", "J", "V", "S"];
+const wd = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
+const num = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
+const TYPE_LABEL: Record<string, string> = { CORTE: "Corte", CORTE_BARBA: "Corte y barba" };
+
+export interface LedgerView { id: string; date: string; kind: string; debit: number; credit: number; method: string | null; note: string | null }
+export interface PlanillaDiff { text: string }
+
+interface Props {
+  data: MembersMonth;
+  days: string[];
+  today: string;
+  prevMonth: string;
+  nextMonth: string;
+  isAdmin: boolean;
+  barbers: { id: string; name: string }[];
+  selectedId: string | null;
+  ledger: LedgerView[];
+  diffs: PlanillaDiff[];
+}
+
+function AttendanceCell({ m, date, editable, on }: { m: MemberRow; date: string; editable: boolean; on: boolean }) {
+  const { run, toast } = useAction();
+  return (
+    <>
+      <button
+        type="button"
+        className={`att ${on ? "on" : ""}`}
+        data-att={`${m.name}|${date}`}
+        disabled={!editable}
+        aria-pressed={on}
+        aria-label={`Asistencia de ${m.name} el ${Number(date.slice(8))}`}
+        onClick={() => run(() => toggleAttendance({ memberId: m.id, date, present: !on }))}
+      >
+        {on ? "✓" : ""}
+      </button>
+      {toast}
+    </>
+  );
+}
+
+function MemberPanel({ m, ledger, barbers, today }: { m: MemberRow; ledger: LedgerView[]; barbers: { id: string; name: string }[]; today: string }) {
+  const { pending, run, toast } = useAction();
+  const [payDate, setPayDate] = useState(today);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("BANCO");
+  const [payNote, setPayNote] = useState("");
+  const [adjAmount, setAdjAmount] = useState("");
+  const [adjReason, setAdjReason] = useState("");
+  const [priceFrom, setPriceFrom] = useState(today);
+  const [price, setPrice] = useState(String(m.price));
+  const [name, setName] = useState(m.name);
+  const [userId, setUserId] = useState(m.userId ?? "");
+  const [type, setType] = useState(m.serviceType);
+  const [phone, setPhone] = useState(m.phone ?? "");
+  return (
+    <section className="card" style={{ marginTop: 14 }} aria-label={`Cuenta de ${m.name}`}>
+      <div className="row spread">
+        <h2 style={{ margin: 0 }}>{m.name}</h2>
+        <span className={`chip ${m.balance > 0 ? "err" : "ok"}`}>{m.balance > 0 ? `Debe ${formatARS(m.balance)}` : m.balance < 0 ? `A favor ${formatARS(-m.balance)}` : "Al día"}</span>
+      </div>
+      <div className="muted">{TYPE_LABEL[m.serviceType]} · {formatARS(m.price)} por visita · atiende {m.barberName}{m.phone ? ` · ${m.phone}` : ""}</div>
+      <div className="kv">
+        <span>Visitas del mes</span><b className="num">{m.visits}</b>
+        <span>A cobrar del mes</span><b className="num">{formatARS(m.charged)}</b>
+        <span>Cobrado en el mes</span><b className="num">{formatARS(m.paid)}</b>
+        <span>Debía de meses anteriores</span><b className="num">{formatARS(m.carried)}</b>
+        <span>Le corresponde al barbero</span><b className="num">{formatARS(m.barberShare)}</b>
+        <span>Queda para el local</span><b className="num">{formatARS(m.localShare)}</b>
+      </div>
+
+      <h2>Movimientos</h2>
+      <ul className="list">
+        {ledger.map((l) => (
+          <li key={l.id}>
+            <span>
+              {l.kind === "PAGO" ? "Cobro" : "Ajuste"} <span className="muted">· {formatDate(l.date)}{l.method ? ` · ${l.method === "EFECTIVO" ? "efectivo" : "banco/MP"}` : ""}{l.note ? ` · ${l.note}` : ""}</span>
+            </span>
+            <span className="num">
+              {l.credit > 0 ? `− ${formatARS(l.credit)}` : `+ ${formatARS(l.debit)}`}{" "}
+              <button className="btn danger" style={{ minHeight: 30, padding: "0 8px" }} aria-label="Anular movimiento" onClick={() => { const reason = prompt("Motivo para anular este movimiento:"); if (reason) run(() => voidMemberEntry({ id: l.id, reason })); }}>✕</button>
+            </span>
+          </li>
+        ))}
+        {ledger.length === 0 && <li className="muted">Sin cobros ni ajustes.</li>}
+      </ul>
+
+      <details open>
+        <summary><b>Registrar un cobro</b></summary>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => saveMemberPayment({ memberId: m.id, date: payDate, amount: num(payAmount), method: payMethod, note: payNote }), () => { setPayAmount(""); setPayNote(""); }); }}>
+          <label className="field"><span>Fecha</span><input type="date" value={payDate} max={today} onChange={(e) => setPayDate(e.target.value)} /></label>
+          <label className="field"><span>Monto ($)</span><input inputMode="numeric" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} /></label>
+          <label className="field"><span>Medio</span><select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}><option value="BANCO">Transferencia / Mercado Pago</option><option value="EFECTIVO">Efectivo</option></select></label>
+          <label className="field"><span>Nota (opcional)</span><input value={payNote} onChange={(e) => setPayNote(e.target.value)} /></label>
+          <button className="btn primary" type="submit" disabled={pending || num(payAmount) <= 0}>Registrar cobro</button>
+        </form>
+      </details>
+      <details>
+        <summary><b>Ajuste manual</b> <span className="muted">(+ suma deuda, − la baja)</span></summary>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => saveMemberAdjustment({ memberId: m.id, date: today, amount: Number(adjAmount.replace(/[^\d-]/g, "")), reason: adjReason }), () => { setAdjAmount(""); setAdjReason(""); }); }}>
+          <label className="field"><span>Monto ($; con − para descontar)</span><input inputMode="numeric" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)} /></label>
+          <label className="field"><span>Motivo (obligatorio)</span><input value={adjReason} onChange={(e) => setAdjReason(e.target.value)} /></label>
+          <button className="btn primary" type="submit" disabled={pending || !adjAmount || !adjReason.trim()}>Guardar ajuste</button>
+        </form>
+      </details>
+      <details>
+        <summary><b>Precio y datos del socio</b></summary>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => saveMemberPrice({ memberId: m.id, validFrom: priceFrom, price: num(price) })); }}>
+          <div className="row"><label className="field" style={{ flex: 1 }}><span>Precio por visita ($)</span><input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} /></label><label className="field" style={{ flex: 1 }}><span>Rige desde</span><input type="date" value={priceFrom} onChange={(e) => setPriceFrom(e.target.value)} /></label></div>
+          <button className="btn" type="submit" disabled={pending || num(price) <= 0}>Guardar precio</button>
+        </form>
+        <form style={{ marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); run(() => editMember({ id: m.id, name, userId: userId || null, serviceType: type, phone, active: m.active })); }}>
+          <label className="field"><span>Nombre</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
+          <label className="field"><span>Barbero asignado</span><select value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Sin asignar</option>{barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+          <label className="field"><span>Tipo</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="CORTE">Corte</option><option value="CORTE_BARBA">Corte y barba</option></select></label>
+          <label className="field"><span>Teléfono</span><input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+          <div className="row">
+            <button className="btn" type="submit" disabled={pending || !name.trim()}>Guardar datos</button>
+            <button className="btn danger" type="button" disabled={pending} onClick={() => run(() => editMember({ id: m.id, name: m.name, userId: m.userId, serviceType: m.serviceType, phone: m.phone ?? "", active: !m.active }))}>{m.active ? "Dar de baja" : "Reactivar"}</button>
+          </div>
+        </form>
+      </details>
+      {toast}
+    </section>
+  );
+}
+
+function NewMemberForm({ barbers }: { barbers: { id: string; name: string }[] }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState("CORTE");
+  const [userId, setUserId] = useState("");
+  const [price, setPrice] = useState("");
+  const [phone, setPhone] = useState("");
+  const { pending, run, toast } = useAction();
+  return (
+    <details className="card" style={{ marginTop: 14 }}>
+      <summary><b>+ Agregar un socio</b></summary>
+      <form onSubmit={(e) => { e.preventDefault(); run(() => saveMember({ name, serviceType: type, userId: userId || null, price: price ? num(price) : null, phone, note: "" }), () => { setName(""); setPrice(""); setPhone(""); }); }}>
+        <label className="field"><span>Nombre</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="field"><span>Tipo de plan</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="CORTE">Corte ($ 15.000 por visita)</option><option value="CORTE_BARBA">Corte y barba ($ 16.500 por visita)</option></select></label>
+        <label className="field"><span>Barbero asignado</span><select value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Sin asignar</option>{barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+        <label className="field"><span>Precio por visita (vacío = el del plan)</span><input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
+        <label className="field"><span>Teléfono (opcional)</span><input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+        <button className="btn primary" type="submit" disabled={pending || !name.trim()}>Agregar socio</button>
+      </form>
+      {toast}
+    </details>
+  );
+}
+
+export default function SociosGrid({ data, days, today, prevMonth, nextMonth, isAdmin, barbers, selectedId, ledger, diffs }: Props) {
+  const todayRef = useRef<HTMLTableCellElement | null>(null);
+  useEffect(() => { todayRef.current?.scrollIntoView({ inline: "center", block: "nearest" }); }, [data.month]);
+  const groups = [...new Set(data.members.map((m) => m.barberName))];
+  const selected = data.members.find((m) => m.id === selectedId) ?? null;
+  const t = data.totals;
+  const colSpan = days.length + (isAdmin ? 5 : 2);
+
+  return (
+    <>
+      <div className="row spread" style={{ margin: "4px 0 8px" }}>
+        <Link className="btn" href={`/socios?mes=${prevMonth}`} aria-label="Mes anterior">←</Link>
+        <h1 style={{ textTransform: "capitalize" }}>Socios · {monthLabel(data.month)}</h1>
+        <Link className="btn" href={`/socios?mes=${nextMonth}`} aria-label="Mes siguiente">→</Link>
+      </div>
+
+      {isAdmin && (
+        <div className="stats">
+          <div className="card"><div className="muted">Socios activos</div><div className="num big2">{t.active}</div></div>
+          <div className="card"><div className="muted">A cobrar del mes</div><div className="num big2">{formatARS(t.charged)}</div></div>
+          <div className="card"><div className="muted">Deuda total</div><div className={`num big2 ${t.debt > 0 ? "errc" : "okc"}`}>{formatARS(t.debt)}</div></div>
+        </div>
+      )}
+      <p className="muted" style={{ margin: "6px 0" }}>
+        Tocá el día para marcar que el socio vino{isAdmin ? "; tocá el nombre para ver su cuenta, cobrar o ajustar" : " (solo hoy)"}.
+      </p>
+
+      <div className="gridwrap" role="region" aria-label="Asistencia de socios" tabIndex={0}>
+        <table className="grid">
+          <thead>
+            <tr>
+              <th className="sticky label">Socio</th>
+              {days.map((d) => (
+                <th key={d} ref={d === today ? todayRef : undefined} className={`day ${d === today ? "today" : ""} ${d > today ? "future" : ""}`}>
+                  <span className="dn">{Number(d.slice(8))}</span>
+                  <span className="wd" style={{ display: "block" }}>{WD[wd(d)]}</span>
+                </th>
+              ))}
+              <th className="total">Visitas</th>
+              {isAdmin && <><th className="total">A cobrar</th><th className="total">Cobrado</th><th className="total">Saldo</th></>}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <FragmentGroup key={g} title={g} colSpan={colSpan}>
+                {data.members.filter((m) => m.barberName === g).map((m) => (
+                  <tr key={m.id} className={m.active ? "" : "inactive"}>
+                    <th className="sticky label">
+                      {isAdmin ? <Link href={`/socios?mes=${data.month}&socio=${m.id}`} scroll={false} style={{ textDecoration: "none" }}><b>{m.name}</b></Link> : <b>{m.name}</b>}
+                      <div className="muted" style={{ fontSize: ".66rem" }}>{TYPE_LABEL[m.serviceType]}{m.active ? "" : " · baja"}</div>
+                    </th>
+                    {days.map((d) => (
+                      <td key={d} className={d === today ? "today" : ""} style={{ padding: 0, textAlign: "center" }}>
+                        <AttendanceCell m={m} date={d} on={m.attended.includes(d)} editable={m.active && d <= today && (isAdmin || d === today)} />
+                      </td>
+                    ))}
+                    <td className="total">{m.visits || ""}</td>
+                    {isAdmin && (
+                      <>
+                        <td className="total">{m.charged ? m.charged.toLocaleString("es-AR") : ""}</td>
+                        <td className="total">{m.paid ? m.paid.toLocaleString("es-AR") : ""}</td>
+                        <td className={`total ${m.balance > 0 ? "errc" : m.balance < 0 ? "okc" : ""}`}>{m.balance ? m.balance.toLocaleString("es-AR") : "✓"}</td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </FragmentGroup>
+            ))}
+            {data.members.length === 0 && (
+              <tr><td colSpan={colSpan} style={{ textAlign: "left", padding: 12 }} className="muted">Todavía no hay socios cargados.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {diffs.length > 0 && isAdmin && (
+        <details className="card" style={{ marginTop: 10 }}>
+          <summary><b>Diferencias con la planilla ({diffs.length})</b> <span className="muted">· la asistencia no coincide con los socios cargados</span></summary>
+          <ul className="list">{diffs.map((d, i) => <li key={i}>{d.text}</li>)}</ul>
+        </details>
+      )}
+
+      {isAdmin && selected && <MemberPanel key={selected.id} m={selected} ledger={ledger} barbers={barbers} today={today} />}
+      {isAdmin && <NewMemberForm barbers={barbers} />}
+    </>
+  );
+}
+
+function FragmentGroup({ title, colSpan, children }: { title: string; colSpan: number; children: React.ReactNode }) {
+  return (
+    <>
+      <tr className="section"><th className="sticky label">{title}</th><td colSpan={colSpan - 1} /></tr>
+      {children}
+    </>
+  );
+}
