@@ -1,0 +1,273 @@
+// Club 95 — modelo de datos.
+// Convenciones:
+//  - Dinero: enteros en pesos argentinos (sin decimales).
+//  - Fechas de negocio: String "YYYY-MM-DD" (zona America/Argentina/Buenos_Aires), así no hay corrimientos por UTC.
+//  - Nada se borra de verdad: deletedAt (baja lógica). Toda escritura debería dejar rastro en AuditLog.
+//  - "Enums" como String (validados en src/domain/types.ts) para poder pasar de SQLite (dev) a Postgres (deploy) sin tocar el esquema.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  username  String    @unique
+  name      String
+  pinHash   String?
+  role      String // DUENO | ADMIN | BARBERO
+  isBarber  Boolean   @default(false) // Ale es ADMIN y además atiende
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  rules    BarberRule[]
+  sales    Sale[]
+  closes   CashClose[]
+  members  Member[]
+}
+
+// Comisión y descuento de bebida por barbero, con vigencia. Nunca fijos en el código.
+model BarberRule {
+  id             String    @id @default(cuid())
+  userId         String
+  validFrom      String // YYYY-MM-DD, vigente hasta la próxima regla del mismo barbero
+  commissionBp   Int // puntos básicos: 60% = 6000, 100% = 10000
+  drinkDeduction Int // $ que se descuenta del servicio antes de calcular la comisión
+  drinkCost      Int // $ de costo real de la bebida entregada por servicio
+  note           String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, validFrom])
+}
+
+// Tarifa por tipo de servicio, igual para todos los barberos (desde septiembre 2026).
+model Tariff {
+  id          String    @id @default(cuid())
+  serviceType String // CORTE | CORTE_BARBA | BARBA_CEJAS
+  validFrom   String
+  price       Int
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@unique([serviceType, validFrom])
+}
+
+model Product {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  kind      String // BEBIDA | CERA | POLVO | ACEITE
+  stock     Int       @default(0)
+  minStock  Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  prices ProductPrice[]
+  sales  Sale[]
+}
+
+model ProductPrice {
+  id        String  @id @default(cuid())
+  productId String
+  validFrom String
+  price     Int // precio de venta
+  cost      Int // costo de compra
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([productId, validFrom])
+}
+
+// Una fila = una o más unidades vendidas el mismo día por el mismo barbero.
+// La importación histórica carga conteos diarios (quantity > 1, paymentMethod null).
+model Sale {
+  id            String    @id @default(cuid())
+  date          String
+  userId        String? // barbero; null = venta del local (ceras, bebidas sueltas)
+  kind          String // SERVICE | PRODUCT | MEMBERSHIP
+  serviceType   String?
+  productId     String?
+  quantity      Int       @default(1)
+  unitPrice     Int       @default(0)
+  drinkIncluded Boolean   @default(false)
+  paymentMethod String? // EFECTIVO | TRANSFERENCIA | MP | MEMBRESIA
+  memberId      String?
+  source        String    @default("APP") // APP | IMPORT
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  user    User?    @relation(fields: [userId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  member  Member?  @relation(fields: [memberId], references: [id])
+
+  @@index([date])
+  @@index([date, userId])
+}
+
+// Cierre de caja. userId null = cierre del local (la planilla histórica tiene un solo cierre por día).
+model CashClose {
+  id             String    @id @default(cuid())
+  date           String
+  userId         String?
+  expectedIncome Int // ingresos del día según ventas
+  labor          Int // mano de obra calculada
+  expectedNet    Int // "dinero que debe haber" = ingresos − mano de obra
+  declaredTotal  Int // cobros declarados (sin cambio dejado)
+  changeLeft     Int       @default(0)
+  difference     Int // declaredTotal − expectedIncome
+  note           String?
+  status         String    @default("OPEN") // OPEN | CLOSED
+  source         String    @default("APP")
+  closedAt       DateTime?
+  closedById     String?
+  reopenedAt     DateTime?
+  reopenedById   String?
+  reopenReason   String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  user  User?           @relation(fields: [userId], references: [id])
+  lines CashCloseLine[]
+
+  @@unique([date, userId])
+}
+
+model CashCloseLine {
+  id      String @id @default(cuid())
+  closeId String
+  account String // BRUBANK | BRUBANK_JUAN | MP_JERE | EFECTIVO | MEMBRESIA_EFECTIVO | MEMBRESIA_BANCO
+  amount  Int
+
+  close CashClose @relation(fields: [closeId], references: [id])
+}
+
+model ExpenseConcept {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  category  String // VARIABLE | ESTRUCTURA | INVERSION | REPOSICION
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  expenses  Expense[]
+  recurring RecurringExpense[]
+}
+
+model Expense {
+  id            String    @id @default(cuid())
+  date          String
+  conceptId     String
+  amount        Int
+  description   String?
+  receiptUrl    String?
+  source        String    @default("APP")
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  concept ExpenseConcept @relation(fields: [conceptId], references: [id])
+
+  @@index([date])
+}
+
+model RecurringExpense {
+  id          String    @id @default(cuid())
+  conceptId   String
+  dayOfMonth  Int
+  amount      Int?
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  concept ExpenseConcept @relation(fields: [conceptId], references: [id])
+}
+
+model Member {
+  id          String    @id @default(cuid())
+  name        String
+  plan        String // BLACK | GOLD
+  serviceType String // CORTE | CORTE_BARBA
+  userId      String? // barbero asignado
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  user    User?          @relation(fields: [userId], references: [id])
+  prices  MemberPrice[]
+  ledger  MemberLedger[]
+  sales   Sale[]
+}
+
+model MemberPrice {
+  id        String @id @default(cuid())
+  memberId  String
+  validFrom String
+  price     Int
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, validFrom])
+}
+
+model MemberLedger {
+  id        String    @id @default(cuid())
+  memberId  String
+  date      String
+  period    String // YYYY-MM al que corresponde
+  kind      String // CARGO | PAGO | AJUSTE
+  debit     Int       @default(0)
+  credit    Int       @default(0)
+  method    String? // EFECTIVO | BANCO
+  note      String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  member Member @relation(fields: [memberId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  userId    String?
+  entity    String
+  entityId  String
+  action    String // CREATE | UPDATE | DELETE | CLOSE | REOPEN | IMPORT
+  before    String?
+  after     String?
+
+  @@index([entity, entityId])
+}
+
+model ImportBatch {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  scope     String // p.ej. "2026-09"
+  fileName  String
+
+  issues ImportIssue[]
+}
+
+// Diferencias y rarezas detectadas en la planilla. Se informan, nunca se corrigen en silencio.
+model ImportIssue {
+  id       String   @id @default(cuid())
+  batchId  String
+  severity String // INFO | WARN | ERROR
+  code     String
+  message  String
+  detail   String?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id])
+}
