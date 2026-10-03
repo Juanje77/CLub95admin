@@ -19,6 +19,7 @@ export type AlertCode =
   | "EFECTIVO_ACUMULADO_ALTO"
   | "RENDICION_ATRASADA"
   | "RENDICION_CON_DIFERENCIA"
+  | "RETIRO_EFECTIVO_EXCEDE"
   | "LIQUIDACION_PENDIENTE";
 
 export interface CloseAlert {
@@ -69,6 +70,8 @@ export const DEFAULT_ALERT_SETTINGS: AlertSettings = {
 
 export interface DayState {
   date: string;
+  /** Efectivo retirado por barberos por encima de lo que el banco no cubrió ese día. */
+  withdrawalExcess?: { name: string; amount: number; cashAllowed: number; cashWithdrawn: number }[];
   salesCount: number;
   /** Ventas sin medio de pago. */
   unpaidSales: number;
@@ -154,6 +157,13 @@ export function computeCloseAlerts(input: AlertInput): CloseAlert[] {
     const hasSales = d.salesCount > 0;
     const closed = d.close?.status === "CLOSED";
     const label = dayLabel(d.date);
+
+    for (const w of d.withdrawalExcess ?? []) {
+      add({
+        key: `RETIRO_EFECTIVO_EXCEDE:${d.date}:${w.name}`, code: "RETIRO_EFECTIVO_EXCEDE", severity: "WARN", audience: ["ADMIN", "DUENO"], date: d.date,
+        message: `${label}: ${w.name} retiró ${formatARS(w.cashWithdrawn)} en efectivo y el banco cubría su parte (podía retirar ${formatARS(w.cashAllowed)}): ${formatARS(w.amount)} fuera de la regla.`,
+      });
+    }
 
     if (hasSales && d.unpaidSales > 0 && !closed) {
       add({

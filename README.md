@@ -50,6 +50,12 @@ Las reglas de arranque están en `src/import/rules.ts`.
 Cada cierre **suma el efectivo del día** (`CashBoxEntry`, kind `CIERRE`). Los retiros de barberos (`RETIRO_BARBERO`) y las rendiciones al dueño (`RENDICION`) restan.
 El saldo es lo que tiene que estar en la caja cuando pasás el fin de semana; al rendir se compara lo entregado contra el saldo y, si no coincide, hace falta una nota y salta una alerta.
 
+### Retiros de barberos: el banco primero
+
+Los pagos son casi todos por transferencia y los barberos cobran de lo recaudado en el banco. **Solo si el banco no cubrió lo que les corresponde cobrar ese día pueden completar con efectivo** de la caja
+(`src/domain/coverage.ts`): por barbero, efectivo permitido = mano de obra del día − transferencias recaudadas en sus ventas.
+Un retiro en efectivo por encima de ese faltante es una excepción: el sistema exige un motivo y deja la alerta `RETIRO_EFECTIVO_EXCEDE` para admin y dueño.
+
 ### Compensación de fin de mes
 
 Los barberos van cobrando durante el mes. A fin de mes `computeSettlement` compara **lo que les corresponde** (servicios + membresías + ajustes) contra **lo que ya cobraron** (retiros en efectivo + transferencias a su cuenta propia, p. ej. MP de Jere).
@@ -76,6 +82,7 @@ La parte de membresías se carga a mano hasta que esté el módulo de Membresía
 | `EFECTIVO_ACUMULADO_ALTO` | El acumulado supera el límite: hay que rendir | aviso | admin, dueño |
 | `RENDICION_ATRASADA` | 7 días o más sin rendir con saldo positivo | aviso | admin, dueño |
 | `RENDICION_CON_DIFERENCIA` | Lo entregado no coincide con el saldo | error | admin, dueño |
+| `RETIRO_EFECTIVO_EXCEDE` | Un barbero retiró efectivo estando cubierto por el banco (o más que el faltante) | aviso | admin, dueño |
 | `LIQUIDACION_PENDIENTE` | El mes anterior sin compensación confirmada (error desde el día 10) | aviso / error | admin, dueño |
 
 Configuración en la tabla `Setting` (clave `alerts`, JSON). Valores por defecto:

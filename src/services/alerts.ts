@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { computeCloseAlerts, DEFAULT_ALERT_SETTINGS, type AlertSettings, type CloseAlert, type DayState, type SettlementState } from "../domain/alerts";
 import type { BoxKind } from "../domain/cashbox";
 import { todayBA } from "../domain/money";
+import { getDayCoverage } from "./figures";
 
 export async function loadAlertSettings(db: PrismaClient): Promise<AlertSettings> {
   const row = await db.setting.findUnique({ where: { key: "alerts" } });
@@ -38,12 +39,17 @@ export async function syncAlerts(db: PrismaClient, opts: { now?: Date; windowDay
   const sales = await db.sale.findMany({ where: { deletedAt: null, date: { gte: from, lte: today } } });
   const closes = await db.cashClose.findMany({ where: { deletedAt: null, date: { gte: from, lte: today } } });
   const closeByDate = new Map(closes.map((c) => [c.date, c]));
+  const withdrawalDates = new Set((await db.cashBoxEntry.findMany({ where: { kind: "RETIRO_BARBERO", deletedAt: null, date: { gte: from, lte: today } } })).map((e) => e.date));
   const days: DayState[] = [];
   for (let d = from; d <= today; d = shiftDate(d, 1)) {
     const ds = sales.filter((s) => s.date === d);
     const c = closeByDate.get(d);
+    const withdrawalExcess = withdrawalDates.has(d)
+      ? (await getDayCoverage(db, d)).filter((x) => x.excess > 0).map((x) => ({ name: x.name, amount: x.excess, cashAllowed: x.cashAllowed, cashWithdrawn: x.cashWithdrawn }))
+      : [];
     days.push({
       date: d,
+      withdrawalExcess,
       salesCount: ds.length,
       unpaidSales: ds.filter((s) => s.kind !== "MEMBERSHIP" && s.unitPrice > 0 && !s.paymentMethod).length,
       close: c

@@ -99,6 +99,15 @@ describe("alertas de cierre diario", () => {
     expect(a[0]!.message).toContain("sobrante de $ 2.050");
   });
 
+  it("retiro de efectivo fuera de la regla avisa a admin y dueño", () => {
+    const d = closed("2026-10-02");
+    d.withdrawalExcess = [{ name: "Jere", amount: 5000, cashAllowed: 0, cashWithdrawn: 5000 }];
+    const a = computeCloseAlerts({ now: SAT_EVENING, days: [d], closedDays: [], box: [], settlements: [] });
+    expect(a.map((x) => [x.code, x.severity])).toEqual([["RETIRO_EFECTIVO_EXCEDE", "WARN"]]);
+    expect(a[0]!.audience).toEqual(["ADMIN", "DUENO"]);
+    expect(a[0]!.message).toContain("Jere retiró $ 5.000 en efectivo y el banco cubría su parte");
+  });
+
   it("cierre tardío es informativo", () => {
     const a = computeCamp(closed("2026-10-01", { closedOn: "2026-10-03" }));
     expect(a.map((x) => [x.code, x.severity])).toEqual([["CIERRE_TARDIO", "INFO"]]);

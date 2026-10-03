@@ -1,6 +1,7 @@
 import { computeDay } from "../domain/cash";
 import type { BarberRule, ServiceCounts, ServiceType, TariffEntry } from "../domain/types";
 import { SERVICE_TYPES } from "../domain/types";
+import { coverage, type BarberCoverage } from "../domain/coverage";
 import type { Db } from "./common";
 
 export interface DayFigures {
@@ -71,4 +72,32 @@ export async function getDayFigures(db: Db, date: string): Promise<DayFigures> {
     labor,
     expectedNet: expectedIncome - labor,
   };
+}
+
+export interface BarberDayCoverage extends BarberCoverage {
+  name: string;
+}
+
+/** Por barbero: lo que tiene que cobrar el día, lo que recaudó el banco en sus ventas y el efectivo retirado. */
+export async function getDayCoverage(db: Db, date: string): Promise<BarberDayCoverage[]> {
+  const sales = await db.sale.findMany({ where: { date, deletedAt: null, kind: "SERVICE", userId: { not: null } } });
+  const withdrawals = await db.cashBoxEntry.findMany({ where: { date, kind: "RETIRO_BARBERO", deletedAt: null, userId: { not: null } } });
+  const { tariffs, rules } = await loadPricing(db);
+
+  const ids = new Set<string>([...sales.map((s) => s.userId!), ...withdrawals.map((w) => w.userId!)]);
+  const out: BarberDayCoverage[] = [];
+  for (const id of ids) {
+    const mine = sales.filter((s) => s.userId === id);
+    const services: ServiceCounts = {};
+    let transfers = 0;
+    for (const s of mine) {
+      services[s.serviceType as ServiceType] = (services[s.serviceType as ServiceType] ?? 0) + s.quantity;
+      if (s.paymentMethod === "TRANSFERENCIA" || s.paymentMethod === "MP") transfers += s.quantity * s.unitPrice;
+    }
+    const labor = mine.length ? computeDay({ date, tariffs, barbers: [{ barberId: id, rules: rules.get(id) ?? [], services }] }).labor : 0;
+    const cashWithdrawn = withdrawals.filter((w) => w.userId === id).reduce((a, w) => a - w.amount, 0);
+    const user = await db.user.findUnique({ where: { id } });
+    out.push({ ...coverage({ barberId: id, labor, transfers, cashWithdrawn }), name: user?.name ?? id });
+  }
+  return out;
 }

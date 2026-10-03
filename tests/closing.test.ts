@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateClose } from "../src/domain/closing";
 import { boxBalance, boxLedger, checkRendicion, daysBetween, lastRendicionDate, type BoxEntry } from "../src/domain/cashbox";
 import { membershipLabor, settle } from "../src/domain/settlement";
+import { checkWithdrawal, coverage } from "../src/domain/coverage";
 
 const base = { expectedIncome: 100000, expectedCash: 20000, expectedTransfers: 80000, declaredCash: 20000, declaredTransfers: 80000, changeLeft: 8000 };
 
@@ -101,5 +102,28 @@ describe("compensación de fin de mes", () => {
   });
   it("saldado", () => {
     expect(settle({ laborServices: 100, laborMembership: 0, collected: 100 }).direction).toBe("SALDADO");
+  });
+});
+
+describe("cobertura del banco y retiros en efectivo", () => {
+  it("si el banco cubre lo que le toca, no hay efectivo permitido", () => {
+    const c = coverage({ barberId: "jere", labor: 33300, transfers: 60000, cashWithdrawn: 0 });
+    expect(c).toMatchObject({ coveredByBank: 33300, cashAllowed: 0, remaining: 0, excess: 0 });
+  });
+  it("si el banco cubre una parte, el resto puede completarse con efectivo", () => {
+    const c = coverage({ barberId: "lucio", labor: 22800, transfers: 15000, cashWithdrawn: 0 });
+    expect(c).toMatchObject({ coveredByBank: 15000, cashAllowed: 7800, remaining: 7800 });
+  });
+  it("todo en efectivo: puede retirar todo lo que le corresponde", () => {
+    expect(coverage({ barberId: "x", labor: 10200, transfers: 0, cashWithdrawn: 10200 })).toMatchObject({ cashAllowed: 10200, remaining: 0, excess: 0 });
+  });
+  it("el exceso es lo retirado por encima del faltante", () => {
+    const c = coverage({ barberId: "x", labor: 10200, transfers: 0, cashWithdrawn: 15000 });
+    expect(c.excess).toBe(4800);
+  });
+  it("un retiro nuevo se evalúa sumado a lo ya retirado", () => {
+    const base = { barberId: "x", labor: 10000, transfers: 0, cashWithdrawn: 6000 };
+    expect(checkWithdrawal(base, 4000)).toMatchObject({ needsNote: false, excessOfThisWithdrawal: 0 });
+    expect(checkWithdrawal(base, 6000)).toMatchObject({ needsNote: true, excessOfThisWithdrawal: 2000 });
   });
 });

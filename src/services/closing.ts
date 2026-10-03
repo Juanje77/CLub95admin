@@ -3,7 +3,8 @@ import { checkRendicion, boxBalance, type BoxKind } from "../domain/cashbox";
 import { validateClose } from "../domain/closing";
 import { todayBA } from "../domain/money";
 import { audit, DomainError, isAdmin, type Actor, type Db } from "./common";
-import { getDayFigures } from "./figures";
+import { checkWithdrawal } from "../domain/coverage";
+import { getDayCoverage, getDayFigures } from "./figures";
 
 export interface CloseDayParams {
   date: string;
@@ -113,13 +114,28 @@ export async function getBoxBalance(db: Db): Promise<number> {
   return boxBalance(entries.map((e) => ({ date: e.date, kind: e.kind as BoxKind, amount: e.amount })));
 }
 
-/** El barbero se retira de la caja lo que ya le corresponde cobrar. Cuenta como "ya cobrado" en la compensación mensual. */
+/**
+ * El barbero cobra de lo recaudado en el banco; solo si el banco no cubrió lo que le corresponde cobrar ese día
+ * puede completar con efectivo de la caja. Un retiro por encima de ese faltante es una excepción: exige motivo
+ * y deja una alerta para el admin. Cuenta como "ya cobrado" en la compensación mensual.
+ */
 export async function addWithdrawal(db: PrismaClient, p: { date: string; actor: Actor; userId: string; amount: number; note?: string }) {
   if (!Number.isInteger(p.amount) || p.amount <= 0) throw new DomainError("MONTO_INVALIDO", "El retiro debe ser un entero mayor a 0.");
   if (p.actor.role === "BARBERO" && p.actor.id !== p.userId) throw new DomainError("SOLO_PROPIO", "Un barbero solo puede registrar sus propios retiros.");
-  const e = await db.cashBoxEntry.create({ data: { date: p.date, kind: "RETIRO_BARBERO", amount: -p.amount, userId: p.userId, note: p.note ?? null, createdById: p.actor.id } });
-  await audit(db, { userId: p.actor.id, entity: "CashBoxEntry", entityId: e.id, action: "CREATE", after: { kind: e.kind, amount: e.amount, userId: p.userId } });
-  return e;
+  return db.$transaction(async (tx) => {
+    const cov = (await getDayCoverage(tx, p.date)).find((c) => c.barberId === p.userId);
+    const check = checkWithdrawal(cov ?? { barberId: p.userId, labor: 0, transfers: 0, cashWithdrawn: 0 }, p.amount);
+    if (check.needsNote && !(p.note ?? "").trim()) {
+      throw new DomainError(
+        "RETIRO_EN_EFECTIVO_SIN_MOTIVO",
+        `El banco cubre lo que le corresponde cobrar hoy; solo puede retirar efectivo por ${check.after.cashAllowed}. Para retirar más (${check.excessOfThisWithdrawal} de más) dejá el motivo.`,
+        check,
+      );
+    }
+    const e = await tx.cashBoxEntry.create({ data: { date: p.date, kind: "RETIRO_BARBERO", amount: -p.amount, userId: p.userId, note: p.note?.trim() || null, createdById: p.actor.id } });
+    await audit(tx, { userId: p.actor.id, entity: "CashBoxEntry", entityId: e.id, action: "CREATE", after: { kind: e.kind, amount: e.amount, userId: p.userId, excess: check.after.excess } });
+    return { entry: e, coverage: check.after };
+  });
 }
 
 /** Rendición del efectivo acumulado al dueño (fin de semana). Si lo entregado no coincide con el saldo, la nota es obligatoria. */
