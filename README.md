@@ -15,7 +15,7 @@ npm test                    # tests del motor de cálculo, servicios, PIN y sesi
 npm run typecheck
 ```
 
-En producción hay que definir `SESSION_SECRET` (mínimo 16 caracteres; sin eso la app no arranca) y correr `npm run build && npm start`.
+En producción correr `npm run build && npm start` (ver más abajo el deploy en Vercel; `SESSION_SECRET` es recomendada, si no se define se deriva de la base).
 La app se puede instalar en el celular como PWA ("Agregar a la pantalla de inicio").
 
 ### Prueba de punta a punta (navegador móvil)
@@ -150,29 +150,29 @@ Cambiar los PIN antes de cualquier deploy.
 
 ## Deploy en Vercel
 
-SQLite no sirve en Vercel (el disco es efímero), así que producción usa **Postgres**. El modelo es el mismo: `scripts/prisma-pg.mjs`
+SQLite no sirve en Vercel (el disco es efímero), así que producción usa **Postgres (Neon)**. El modelo es el mismo: `scripts/prisma-pg.mjs`
 deriva `prisma/schema.postgres.prisma` del esquema de desarrollo cambiando solo el proveedor. Desarrollo y tests siguen con SQLite.
-Probado de punta a punta contra Postgres 16 (tablas, seed, build y la prueba en navegador móvil).
+Probado de punta a punta contra Postgres 16 (tablas, usuarios, build, login y la prueba en navegador móvil).
 
-### Pasos (unos 10 minutos)
+### Pasos
 
-1. **Base de datos:** en Vercel, *Storage → Create → Neon (Postgres)* y conectala al proyecto. Elegí la región **São Paulo** (la misma que usa la app, `gru1`).
-   Eso define `DATABASE_URL` (y suele definir `DATABASE_URL_UNPOOLED`).
-2. **Proyecto:** *Add New → Project → importar `Juanje77/CLub95admin`*, rama `claude/club95-management-system-8xn7lj` (o `main` cuando se mergee).
-   El build lo toma de `vercel.json` (`npm run vercel-build`: genera el cliente de Postgres, crea/actualiza las tablas con `prisma db push` y compila).
-3. **Variables de entorno** (*Settings → Environment Variables*, entorno Production):
-   - `DATABASE_URL`: la de la base (viene con la integración).
-   - `DIRECT_URL`: la conexión **sin pooler** (en Neon, la "unpooled"). Se usa para crear las tablas.
-   - `SESSION_SECRET`: una cadena larga al azar (`openssl rand -base64 32`). Sin esto la app no arranca.
-4. **Deploy.** Después, **una sola vez**, creá los usuarios y los datos base desde tu máquina apuntando a esa base:
+1. **Base de datos:** en Vercel, *Storage → Create → Neon (Postgres)*, región **São Paulo**, y conectala a este proyecto con los entornos
+   **Production y Preview**. La integración crea sola las variables (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`…): **no hay que copiar nada a mano**.
+   El build las reconoce aunque tengan prefijo o se llamen distinto (`src/lib/db-env.ts`).
+2. **Proyecto:** *Add New → Project → importar `Juanje77/CLub95admin`*. En *Settings → Git → Production Branch* poné la rama que tiene la app.
+   El build lo toma de `vercel.json` (`npm run vercel-build`).
+3. **Primer deploy:** el build crea las tablas y, **solo si la base está vacía**, crea los usuarios jere, ale, lucio y dueno con **PIN al azar**
+   y los imprime **una sola vez** en el log del build (*Deployments → el deploy → Build Logs*, buscá "Usuarios creados con PIN al azar").
+   **Anotá los PIN y no compartas capturas del log.** En los deploys siguientes no cambia ningún PIN. También fija como fecha de arranque de las alertas el día del primer deploy.
+4. Abrí la URL de Vercel en el celular y "Agregar a la pantalla de inicio".
 
-   ```bash
-   DATABASE_URL="<la de producción>" DIRECT_URL="<la sin pooler>" npm run seed:prod
-   ```
+### Variables de entorno
 
-   Genera PIN **al azar** para jere, ale, lucio y dueno y los imprime una sola vez (anotalos). Además fija como fecha de arranque de las alertas el día de hoy.
-   Si la base ya tiene usuarios, no cambia ningún PIN.
-5. Abrí la URL de Vercel en el celular y "Agregar a la pantalla de inicio".
+| Variable | Obligatoria | Qué es |
+|---|---|---|
+| `DATABASE_URL` (o `POSTGRES_URL`…) | sí | La crea la integración de Neon. |
+| `DATABASE_URL_UNPOOLED` (o `DIRECT_URL`) | recomendada | Conexión sin pooler para crear las tablas. La crea Neon. |
+| `SESSION_SECRET` | no | Clave para firmar la sesión. Si no se define, se **deriva de la conexión a la base** (que ya es un secreto). Definir una propia (`openssl rand -base64 32`) permite rotarla sin tocar la base; al cambiarla se cierran todas las sesiones. |
 
 ### Importar septiembre a producción (opcional)
 
@@ -185,4 +185,5 @@ DATABASE_URL="<la de producción>" npm run import:planilla -- --month 2026-09
 ### Notas
 
 - `prisma db push` corre en cada build: si un cambio del esquema fuera destructivo, el build **falla** en vez de borrar datos. Cuando haya datos reales conviene pasar a migraciones (`prisma migrate`).
+- `npm run seed:prod` sigue disponible para crear los usuarios a mano contra una base, pero ya no hace falta.
 - Los datos de la planilla y `data/` no se suben al repositorio.

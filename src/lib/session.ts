@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { deriveSessionSecret } from "./db-env";
 
 export const SESSION_COOKIE = "c95_session";
 export const SESSION_HOURS = 12;
@@ -6,7 +7,12 @@ export const SESSION_HOURS = 12;
 function secret(): string {
   const s = process.env.SESSION_SECRET;
   if (s && s.length >= 16) return s;
-  if (process.env.NODE_ENV === "production") throw new Error("Falta SESSION_SECRET (mínimo 16 caracteres) en producción.");
+  if (process.env.NODE_ENV === "production") {
+    // Sin SESSION_SECRET se deriva de la conexión a la base (que ya es un secreto). Recomendado: definir SESSION_SECRET.
+    const derived = deriveSessionSecret(process.env);
+    if (derived) return derived;
+    throw new Error("Falta SESSION_SECRET (mínimo 16 caracteres) y no hay una base Postgres de la cual derivarla.");
+  }
   return "dev-only-secret-change-me-please";
 }
 
