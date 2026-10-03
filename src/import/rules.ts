@@ -17,4 +17,4 @@ export const SYSTEM_RULES: Record<BarberKey, BarberRule[]> = {
   BENI: [{ validFrom: SYSTEM_FROM, commissionBp: 6000, drinkDeduction: 3000, drinkCost: 3000 }],
 };
 
-export const BARBER_NAMES: Record<BarberKey, string> = { JERE: "Jere", ALE: "Ale", BENI: "Beni / Lucio" };
+export const BARBER_NAMES: Record<BarberKey, string> = { JERE: "Jere", ALE: "Ale", BENI: "Beni / Lucio (hasta sep-26)" };

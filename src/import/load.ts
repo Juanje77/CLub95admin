@@ -21,10 +21,28 @@ const LOOSE_PRODUCTS: Record<string, { name: string; priceKey: string }> = {
   ACQUARIUS: { name: "Aquarius", priceKey: "ACQUARIUS" },
 };
 
-const SEED_USERS: { key: BarberKey; username: string; role: string; pin: string }[] = [
-  { key: "JERE", username: "jere", role: "BARBERO", pin: "1111" },
-  { key: "ALE", username: "ale", role: "ADMIN", pin: "2222" },
-  { key: "BENI", username: "beni", role: "BARBERO", pin: "3333" },
+// Septiembre 2026: Beni y Lucio compartían el puesto y la planilla no los separa (columna "BENI / LUCIO").
+// Desde octubre queda solo Lucio: Beni queda como usuario inactivo para conservar el histórico.
+const SEED_USERS: { key: BarberKey; username: string; role: string; pin: string; active: boolean; name: string }[] = [
+  { key: "JERE", username: "jere", role: "BARBERO", pin: "1111", active: true, name: BARBER_NAMES.JERE },
+  { key: "ALE", username: "ale", role: "ADMIN", pin: "2222", active: true, name: BARBER_NAMES.ALE },
+  { key: "BENI", username: "beni", role: "BARBERO", pin: "3333", active: false, name: BARBER_NAMES.BENI },
+];
+
+export const LUCIO_FROM = "2026-10-01";
+
+/** A qué usuario corresponde la columna "BENI / LUCIO" de la planilla según el mes. */
+export function slotUsername(yearMonth: string): string {
+  return `${yearMonth}-01` >= LUCIO_FROM ? "lucio" : "beni";
+}
+
+const ACCOUNTS: { key: string; name: string; kind: string; owner?: string }[] = [
+  { key: "EFECTIVO", name: "Efectivo", kind: "EFECTIVO" },
+  { key: "BRUBANK", name: "Brubank", kind: "TRANSFERENCIA" },
+  { key: "BRUBANK_JUAN", name: "Brubank Juan", kind: "TRANSFERENCIA" },
+  { key: "MP_JERE", name: "Mercado Pago Jere", kind: "TRANSFERENCIA", owner: "jere" },
+  { key: "MEMBRESIA_EFECTIVO", name: "Membresía en efectivo", kind: "EFECTIVO" },
+  { key: "MEMBRESIA_BANCO", name: "Membresía por Brubank/MP", kind: "TRANSFERENCIA" },
 ];
 
 export async function seedBase(db: PrismaClient, m: MonthData): Promise<Record<BarberKey, string>> {
@@ -33,7 +51,7 @@ export async function seedBase(db: PrismaClient, m: MonthData): Promise<Record<B
     const user = await db.user.upsert({
       where: { username: u.username },
       update: {},
-      create: { username: u.username, name: BARBER_NAMES[u.key], role: u.role, isBarber: true, pinHash: hashPin(u.pin) },
+      create: { username: u.username, name: u.name, role: u.role, isBarber: true, active: u.active, pinHash: hashPin(u.pin) },
     });
     ids[u.key] = user.id;
     for (const r of SYSTEM_RULES[u.key]) {
@@ -44,11 +62,30 @@ export async function seedBase(db: PrismaClient, m: MonthData): Promise<Record<B
       });
     }
   }
+  const lucio = await db.user.upsert({
+    where: { username: "lucio" },
+    update: {},
+    create: { username: "lucio", name: "Lucio", role: "BARBERO", isBarber: true, pinHash: hashPin("4444") },
+  });
+  // Lucio ocupa el puesto de Beni desde octubre con las mismas condiciones (60%, bebida de $3.000): confirmar.
+  await db.barberRule.upsert({
+    where: { userId_validFrom: { userId: lucio.id, validFrom: LUCIO_FROM } },
+    update: {},
+    create: { userId: lucio.id, validFrom: LUCIO_FROM, commissionBp: 6000, drinkDeduction: 3000, drinkCost: 3000, note: "Mismas condiciones que Beni (a confirmar)" },
+  });
   await db.user.upsert({
     where: { username: "dueno" },
     update: {},
     create: { username: "dueno", name: "Dueño", role: "DUENO", isBarber: false, pinHash: hashPin("9999") },
   });
+  for (const a of ACCOUNTS) {
+    const ownerId = a.owner ? (await db.user.findUnique({ where: { username: a.owner } }))?.id ?? null : null;
+    await db.paymentAccount.upsert({
+      where: { key: a.key },
+      update: {},
+      create: { key: a.key, name: a.name, kind: a.kind, ownerUserId: ownerId },
+    });
+  }
   for (const t of SYSTEM_TARIFFS) {
     await db.tariff.upsert({
       where: { serviceType_validFrom: { serviceType: t.serviceType, validFrom: t.validFrom } },
@@ -96,6 +133,7 @@ export async function loadMonth(
 ): Promise<LoadResult> {
   const { month: m, yearMonth } = opts;
   const ids = await seedBase(db, m);
+  ids.BENI = (await db.user.findUniqueOrThrow({ where: { username: slotUsername(yearMonth) } })).id;
   const prefix = `${yearMonth}-`;
   const productByName = new Map((await db.product.findMany()).map((p) => [p.name, p]));
 
@@ -105,7 +143,6 @@ export async function loadMonth(
       const now = new Date();
       await tx.sale.updateMany({ where: { source: "IMPORT", date: { startsWith: prefix }, deletedAt: null }, data: { deletedAt: now } });
       await tx.expense.updateMany({ where: { source: "IMPORT", date: { startsWith: prefix }, deletedAt: null }, data: { deletedAt: now } });
-      await tx.cashClose.updateMany({ where: { source: "IMPORT", date: { startsWith: prefix }, deletedAt: null }, data: { deletedAt: now } });
 
       const batch = await tx.importBatch.create({
         data: { scope: yearMonth, fileName: opts.fileName, issues: { create: opts.issues.map((i) => ({ severity: i.severity, code: i.code, message: i.message })) } },
@@ -156,15 +193,19 @@ export async function loadMonth(
           barbers: KEYS.map((k) => ({ barberId: k, rules: SYSTEM_RULES[k], services: day.barbers[k].services })),
           extraSales: extraSales(day, m),
         });
-        const close = await tx.cashClose.create({
-          data: {
-            date: day.date, userId: null, expectedIncome: r.expectedIncome, labor: r.labor, expectedNet: r.expectedNet,
-            declaredTotal: payments, changeLeft: day.declared.CAMBIO ?? 0, difference: payments - r.expectedIncome,
-            status: "CLOSED", source: "IMPORT", closedAt: now,
-            lines: { create: Object.entries(day.declared).filter(([k, v]) => k !== "CAMBIO" && v !== 0).map(([account, amount]) => ({ account, amount })) },
-          },
-        });
-        void close;
+        const existing = await tx.cashClose.findUnique({ where: { date: day.date } });
+        if (existing && existing.source === "APP" && !existing.deletedAt) continue; // nunca pisar un cierre cargado en la app
+        const transfers = (day.declared.BRUBANK ?? 0) + (day.declared.BRUBANK_JUAN ?? 0) + (day.declared.MP_JERE ?? 0);
+        const data = {
+          expectedIncome: r.expectedIncome, expectedCash: null, expectedTransfers: null, labor: r.labor, expectedNet: r.expectedNet,
+          declaredCash: day.declared.EFECTIVO ?? 0, declaredTransfers: transfers, declaredTotal: payments,
+          changeLeft: day.declared.CAMBIO ?? 0, difference: payments - r.expectedIncome,
+          status: "CLOSED", source: "IMPORT", closedAt: now, deletedAt: null,
+        };
+        const close = existing ? await tx.cashClose.update({ where: { id: existing.id }, data }) : await tx.cashClose.create({ data: { date: day.date, ...data } });
+        await tx.cashCloseLine.deleteMany({ where: { closeId: close.id } });
+        const lines = Object.entries(day.declared).filter(([k, v]) => k !== "CAMBIO" && v !== 0).map(([account, amount]) => ({ closeId: close.id, account, amount }));
+        if (lines.length) await tx.cashCloseLine.createMany({ data: lines });
         closes++;
       }
 
