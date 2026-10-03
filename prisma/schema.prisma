@@ -34,6 +34,7 @@ model User {
   accounts    PaymentAccount[]
   settlements BarberSettlement[]
   boxEntries  CashBoxEntry[]
+  attendances Attendance[]
 }
 
 // Comisión y descuento de bebida por barbero, con vigencia. Nunca fijos en el código.
@@ -265,6 +266,7 @@ model Expense {
   amount        Int
   description   String?
   receiptUrl    String?
+  receiptData   String? // foto del comprobante (JPEG reducido, data URL)
   source        String    @default("APP")
   importBatchId String?
   createdById   String?
@@ -293,16 +295,20 @@ model Member {
   id          String    @id @default(cuid())
   name        String
   plan        String // BLACK | GOLD
+  phone       String?
+  startDate   String?
+  note        String?
   serviceType String // CORTE | CORTE_BARBA
   userId      String? // barbero asignado
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
   deletedAt   DateTime?
 
-  user   User?          @relation(fields: [userId], references: [id])
-  prices MemberPrice[]
-  ledger MemberLedger[]
-  sales  Sale[]
+  user        User?          @relation(fields: [userId], references: [id])
+  prices      MemberPrice[]
+  ledger      MemberLedger[]
+  sales       Sale[]
+  attendances Attendance[]
 }
 
 model MemberPrice {
@@ -364,4 +370,35 @@ model ImportIssue {
   detail   String?
 
   batch ImportBatch @relation(fields: [batchId], references: [id])
+}
+
+// Asistencia de un socio un día. Cada asistencia se cobra al precio vigente de la membresía y le suma al barbero que atendió.
+model Attendance {
+  id          String    @id @default(cuid())
+  memberId    String
+  date        String
+  userId      String? // barbero que lo atendió (por defecto el asignado al socio)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  member Member @relation(fields: [memberId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@unique([memberId, date])
+  @@index([date])
+}
+
+// Ingresos que no son cortes ni productos (publicidad, alquiler de yerba, etc.), como las filas "INGRESOS EXTRA" de TOTALES.
+model ExtraIncome {
+  id          String    @id @default(cuid())
+  date        String
+  concept     String
+  amount      Int
+  note        String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([date])
 }
