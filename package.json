@@ -10,17 +10,28 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "import:planilla": "tsx src/import/cli.ts",
-    "alerts": "tsx src/services/alerts-cli.ts"
+    "alerts": "tsx src/services/alerts-cli.ts",
+    "seed": "tsx src/seed-cli.ts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "e2e": "node tests/e2e/run.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "playwright-core": "^1.63.0",
     "prisma": "^6.19.3",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "vitest": "^5.0.3"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "next": "^15.5.27",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }
