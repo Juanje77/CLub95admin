@@ -51,7 +51,7 @@ export async function syncAlerts(db: PrismaClient, opts: { now?: Date; windowDay
       date: d,
       withdrawalExcess,
       salesCount: ds.length,
-      unpaidSales: ds.filter((s) => s.kind !== "MEMBERSHIP" && s.unitPrice > 0 && !s.paymentMethod).length,
+      unpaidSales: ds.filter((s) => s.source === "APP" && s.kind !== "MEMBERSHIP" && s.unitPrice > 0 && !s.paymentMethod).length,
       close: c
         ? {
             status: c.status as "OPEN" | "CLOSED",

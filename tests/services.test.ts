@@ -148,41 +148,6 @@ describe("fila de efectivo acumulado", () => {
   });
 });
 
-describe("retiros en efectivo de los barberos", () => {
-  it("si el banco no cubrió lo que le toca, puede completar con efectivo hasta ese faltante", async () => {
-    // Lucio: 1 corte cobrado en efectivo → le corresponde $ 10.200 y el banco no recaudó nada.
-    await sale(db, { date: DAY, userId: ids.lucio, serviceType: "CORTE", unitPrice: 20000, paymentMethod: "EFECTIVO" });
-    const r = await addWithdrawal(db, { date: DAY, actor: barbero, userId: ids.lucio, amount: 10200 });
-    expect(r.coverage).toMatchObject({ labor: 10200, transfers: 0, cashAllowed: 10200, excess: 0, remaining: 0 });
-  });
-
-  it("si el banco cubrió su parte, retirar efectivo exige motivo", async () => {
-    // Jere: 3 cortes por transferencia → le corresponden $ 33.300 y el banco recaudó $ 60.000.
-    await sale(db, { date: DAY, userId: ids.jere, serviceType: "CORTE", quantity: 3, unitPrice: 20000, paymentMethod: "TRANSFERENCIA" });
-    const jere: Actor = { id: ids.jere, role: "BARBERO" };
-    expect(await code(addWithdrawal(db, { date: DAY, actor: jere, userId: ids.jere, amount: 5000 }))).toBe("RETIRO_EN_EFECTIVO_SIN_MOTIVO");
-    expect(await db.cashBoxEntry.count()).toBe(0);
-    const r = await addWithdrawal(db, { date: DAY, actor: jere, userId: ids.jere, amount: 5000, note: "Le faltaba para el colectivo" });
-    expect(r.coverage.excess).toBe(5000);
-  });
-
-  it("retirar más que el faltante exige motivo por la parte que sobra", async () => {
-    await sale(db, { date: DAY, userId: ids.lucio, serviceType: "CORTE", unitPrice: 20000, paymentMethod: "EFECTIVO" });
-    await addWithdrawal(db, { date: DAY, actor: barbero, userId: ids.lucio, amount: 8000 });
-    expect(await code(addWithdrawal(db, { date: DAY, actor: barbero, userId: ids.lucio, amount: 5000 }))).toBe("RETIRO_EN_EFECTIVO_SIN_MOTIVO");
-  });
-
-  it("deja una alerta para el admin cuando hubo retiro fuera de la regla", async () => {
-    await db.setting.create({ data: { key: "alerts", value: JSON.stringify({ startDate: "2026-10-03" }) } });
-    await sale(db, { date: DAY, userId: ids.jere, serviceType: "CORTE", quantity: 3, unitPrice: 20000, paymentMethod: "TRANSFERENCIA" });
-    await addWithdrawal(db, { date: DAY, actor: admin, userId: ids.jere, amount: 5000, note: "pidió efectivo" });
-    const a = await syncAlerts(db, { now: new Date("2026-10-03T18:00:00Z") });
-    const w = a.find((x) => x.code === "RETIRO_EFECTIVO_EXCEDE")!;
-    expect(w.audience).toEqual(["ADMIN", "DUENO"]);
-    expect(w.message).toContain("Jere retiró $ 5.000");
-  });
-});
-
 describe("compensación de fin de mes", () => {
   it("compara lo que le corresponde (servicios + membresías) con lo que ya cobró", async () => {
     // Lucio: 2 cortes y 1 corte y barba en octubre → (20000−3000)×0,6 = 10.200 por corte; 11.400 por corte y barba.

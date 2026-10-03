@@ -14,7 +14,7 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
  *  - un barbero solo carga sus propias ventas y solo del día de hoy;
  *  - cargar un día pasado, o a nombre de otro barbero, requiere admin/dueño.
  */
-async function guard(db: PrismaClient, actor: Actor, date: string, userId: string | null, now: Date) {
+export async function guardEdit(db: PrismaClient, actor: Actor, date: string, userId: string | null, now: Date) {
   const today = todayBA(now);
   if (date > today) throw new DomainError("FECHA_FUTURA", "No se pueden cargar ventas de un día futuro.");
   if (!isAdmin(actor)) {
@@ -37,7 +37,7 @@ export async function addServiceSale(
 ) {
   const now = p.now ?? new Date();
   const method = checkPayment(p.paymentMethod);
-  await guard(db, p.actor, p.date, p.userId, now);
+  await guardEdit(db, p.actor, p.date, p.userId, now);
   const barber = await db.user.findUnique({ where: { id: p.userId } });
   if (!barber || !barber.active || !barber.isBarber) throw new DomainError("BARBERO_INVALIDO", "Ese barbero no está activo.");
   const { tariffs } = await loadPricing(db);
@@ -51,7 +51,7 @@ export async function addServiceSale(
 
 /** Visita de un socio de membresía: no cobra el corte en caja; descuenta una asistencia y suma al barbero para la compensación. */
 export async function addMembershipVisit(db: PrismaClient, p: { actor: Actor; date: string; userId: string; now?: Date }) {
-  await guard(db, p.actor, p.date, p.userId, p.now ?? new Date());
+  await guardEdit(db, p.actor, p.date, p.userId, p.now ?? new Date());
   const sale = await db.sale.create({
     data: { date: p.date, userId: p.userId, kind: "MEMBERSHIP", quantity: 1, unitPrice: 0, drinkIncluded: true, paymentMethod: "MEMBRESIA", source: "APP", createdById: p.actor.id },
   });
@@ -67,7 +67,7 @@ export async function addProductSale(
   const quantity = p.quantity ?? 1;
   if (!Number.isInteger(quantity) || quantity <= 0) throw new DomainError("CANTIDAD_INVALIDA", "La cantidad debe ser un entero mayor a 0.");
   const method = checkPayment(p.paymentMethod);
-  await guard(db, p.actor, p.date, p.userId, p.now ?? new Date());
+  await guardEdit(db, p.actor, p.date, p.userId, p.now ?? new Date());
   return db.$transaction(async (tx) => {
     const product = await tx.product.findUnique({ where: { id: p.productId }, include: { prices: true } });
     if (!product || product.deletedAt || !product.active) throw new DomainError("PRODUCTO_INVALIDO", "Producto inexistente o inactivo.");
@@ -85,7 +85,7 @@ export async function addProductSale(
 /** Deshace la última venta cargada ese día (la del barbero, o la última del día si es admin). Baja lógica; el stock vuelve. */
 export async function undoLastSale(db: PrismaClient, p: { actor: Actor; date: string; userId?: string | null; now?: Date }) {
   const userId = isAdmin(p.actor) ? (p.userId ?? null) : p.actor.id;
-  await guard(db, p.actor, p.date, userId, p.now ?? new Date());
+  await guardEdit(db, p.actor, p.date, userId, p.now ?? new Date());
   return db.$transaction(async (tx) => {
     const last = await tx.sale.findFirst({
       where: { date: p.date, deletedAt: null, source: "APP", ...(userId ? { createdById: p.actor.id, userId } : {}) },

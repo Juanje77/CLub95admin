@@ -37,6 +37,7 @@ export async function getDayFigures(db: Db, date: string): Promise<DayFigures> {
   let cash = 0;
   let transfers = 0;
   let unpaid = 0;
+  let unknownSplit = false; // hay ventas cargadas por cantidad (sin medio de pago): no se puede separar efectivo de transferencias
   const byBarber = new Map<string, ServiceCounts>();
   for (const s of sales) {
     const amount = s.quantity * s.unitPrice;
@@ -49,7 +50,11 @@ export async function getDayFigures(db: Db, date: string): Promise<DayFigures> {
     expectedIncome += amount;
     if (s.paymentMethod === "EFECTIVO") cash += amount;
     else if (s.paymentMethod === "TRANSFERENCIA" || s.paymentMethod === "MP") transfers += amount;
-    else unpaid++;
+    else {
+      unknownSplit = true;
+      // Solo las ventas cargadas una por una (APP) deben traer medio de pago; las de la grilla se declaran por cuenta al cerrar.
+      if (s.source === "APP") unpaid++;
+    }
   }
 
   let labor = 0;
@@ -67,8 +72,8 @@ export async function getDayFigures(db: Db, date: string): Promise<DayFigures> {
     salesCount: sales.length,
     unpaidSales: unpaid,
     expectedIncome,
-    expectedCash: unpaid > 0 ? null : cash,
-    expectedTransfers: unpaid > 0 ? null : transfers,
+    expectedCash: unknownSplit ? null : cash,
+    expectedTransfers: unknownSplit ? null : transfers,
     labor,
     expectedNet: expectedIncome - labor,
   };
@@ -78,26 +83,38 @@ export interface BarberDayCoverage extends BarberCoverage {
   name: string;
 }
 
-/** Por barbero: lo que tiene que cobrar el día, lo que recaudó el banco en sus ventas y el efectivo retirado. */
+/**
+ * Por barbero: lo que tiene que cobrar el día y cuánto puede retirar en efectivo.
+ * Los barberos cobran de lo recaudado en el banco: el faltante del día es (mano de obra total − transferencias declaradas)
+ * y se reparte entre los barberos en proporción a lo que les corresponde. Mientras el día no tenga las transferencias
+ * cargadas no se sabe qué cubrió el banco, así que no se marca ningún retiro como excepción.
+ */
 export async function getDayCoverage(db: Db, date: string): Promise<BarberDayCoverage[]> {
   const sales = await db.sale.findMany({ where: { date, deletedAt: null, kind: "SERVICE", userId: { not: null } } });
   const withdrawals = await db.cashBoxEntry.findMany({ where: { date, kind: "RETIRO_BARBERO", deletedAt: null, userId: { not: null } } });
+  const close = await db.cashClose.findUnique({ where: { date } });
   const { tariffs, rules } = await loadPricing(db);
 
   const ids = new Set<string>([...sales.map((s) => s.userId!), ...withdrawals.map((w) => w.userId!)]);
-  const out: BarberDayCoverage[] = [];
+  const laborBy = new Map<string, number>();
   for (const id of ids) {
     const mine = sales.filter((s) => s.userId === id);
     const services: ServiceCounts = {};
-    let transfers = 0;
-    for (const s of mine) {
-      services[s.serviceType as ServiceType] = (services[s.serviceType as ServiceType] ?? 0) + s.quantity;
-      if (s.paymentMethod === "TRANSFERENCIA" || s.paymentMethod === "MP") transfers += s.quantity * s.unitPrice;
-    }
-    const labor = mine.length ? computeDay({ date, tariffs, barbers: [{ barberId: id, rules: rules.get(id) ?? [], services }] }).labor : 0;
+    for (const s of mine) services[s.serviceType as ServiceType] = (services[s.serviceType as ServiceType] ?? 0) + s.quantity;
+    laborBy.set(id, mine.length ? computeDay({ date, tariffs, barbers: [{ barberId: id, rules: rules.get(id) ?? [], services }] }).labor : 0);
+  }
+  const totalLabor = [...laborBy.values()].reduce((a, b) => a + b, 0);
+  const pool = close && !close.deletedAt && close.declaredTransfers + close.declaredCash > 0 ? close.declaredTransfers : null;
+  const shortfall = pool === null ? null : Math.max(0, totalLabor - pool);
+
+  const out: BarberDayCoverage[] = [];
+  for (const id of ids) {
+    const labor = laborBy.get(id) ?? 0;
+    const allowed = shortfall === null ? labor : totalLabor > 0 ? Math.floor((shortfall * labor) / totalLabor) : 0;
     const cashWithdrawn = withdrawals.filter((w) => w.userId === id).reduce((a, w) => a - w.amount, 0);
     const user = await db.user.findUnique({ where: { id } });
-    out.push({ ...coverage({ barberId: id, labor, transfers, cashWithdrawn }), name: user?.name ?? id });
+    // `transfers` = la parte del banco atribuida al barbero (lo que su mano de obra no necesita de efectivo).
+    out.push({ ...coverage({ barberId: id, labor, transfers: labor - allowed, cashWithdrawn }), name: user?.name ?? id });
   }
   return out;
 }
