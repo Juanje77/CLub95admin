@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { logout } from "../app/actions";
 import { alertsFor } from "../domain/alerts";
 import { db } from "../lib/db";
@@ -25,11 +26,14 @@ export default async function Shell({ user, children, alertCount, wide }: { user
               {user.name} · {user.role === "DUENO" ? "dueño" : user.role === "ADMIN" ? "admin" : "barbero"}
             </div>
           </div>
-          <form action={logout}>
-            <button className="btn" type="submit">
-              Salir
-            </button>
-          </form>
+          <div className="row">
+            <Link className="btn" href="/cuenta" style={{ textDecoration: "none" }}>Mi PIN</Link>
+            <form action={logout}>
+              <button className="btn" type="submit">
+                Salir
+              </button>
+            </form>
+          </div>
         </header>
         {children}
       </main>

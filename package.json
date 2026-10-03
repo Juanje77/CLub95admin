@@ -15,7 +15,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "e2e": "node tests/e2e/run.mjs",
+    "e2e": "bash scripts/e2e.sh",
     "vercel-build": "tsx scripts/vercel-build.ts",
     "seed:prod": "node scripts/prisma-pg.mjs && prisma generate --schema prisma/schema.postgres.prisma && tsx src/seed-cli.ts --random-pins"
   },

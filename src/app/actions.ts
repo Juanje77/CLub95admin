@@ -10,15 +10,17 @@ import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError } from "../services/common";
+import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
-export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
+export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
 
-async function run(fn: (user: SessionUser) => Promise<string | void>): Promise<ActionResult> {
+async function run(fn: (user: SessionUser) => Promise<string | { message?: string; data?: unknown } | void>): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const message = await fn(user);
+    const out = await fn(user);
     revalidatePath("/", "layout");
-    return { ok: true, message: message ?? undefined };
+    if (out && typeof out === "object") return { ok: true, message: out.message, data: out.data };
+    return { ok: true, message: out ?? undefined };
   } catch (e) {
     unstable_rethrow(e);
     if (e instanceof DomainError) return { ok: false, error: e.message };
@@ -109,5 +111,77 @@ export async function handOver(p: { amount: number; receivedBy: string; note: st
   return run(async (actor) => {
     await rendir(db, { actor, date: todayBA(), handedOver: int(p.amount), receivedBy: p.receivedBy, note: p.note });
     return "Rendición registrada.";
+  });
+}
+
+// --- Mi PIN y configuración ---------------------------------------------------------------------------------------------------
+
+export async function changePin(p: { current: string; next: string }) {
+  return run(async (user) => {
+    await changeOwnPin(db, { userId: user.id, ...p });
+    return "PIN actualizado.";
+  });
+}
+
+export async function adminResetPin(p: { userId: string }) {
+  return run(async (actor) => {
+    const r = await resetPin(db, { actor, targetId: p.userId });
+    return { data: r };
+  });
+}
+
+export async function adminCreateBarber(p: { name: string; username: string; validFrom: string; commissionBp: number; drinkDeduction: number; drinkCost: number }) {
+  return run(async (actor) => {
+    const r = await createBarber(db, { actor, ...p, commissionBp: int(p.commissionBp), drinkDeduction: int(p.drinkDeduction), drinkCost: int(p.drinkCost) });
+    return { data: { pin: r.pin, name: r.user.name, username: r.user.username } };
+  });
+}
+
+export async function adminSetActive(p: { userId: string; active: boolean }) {
+  return run(async (actor) => {
+    await setUserActive(db, { actor, ...p });
+    return p.active ? "Usuario activado." : "Usuario desactivado.";
+  });
+}
+
+export async function adminAddRule(p: { userId: string; validFrom: string; commissionBp: number; drinkDeduction: number; drinkCost: number }) {
+  return run(async (actor) => {
+    await addBarberRule(db, { actor, ...p, commissionBp: int(p.commissionBp), drinkDeduction: int(p.drinkDeduction), drinkCost: int(p.drinkCost) });
+    return "Comisión guardada.";
+  });
+}
+
+export async function adminAddTariff(p: { serviceType: ServiceType; validFrom: string; price: number }) {
+  return run(async (actor) => {
+    await addTariff(db, { actor, ...p, price: int(p.price) });
+    return "Tarifa guardada.";
+  });
+}
+
+export async function adminCreateProduct(p: { name: string; kind: string; price: number; cost: number; stock: number; minStock: number; validFrom: string }) {
+  return run(async (actor) => {
+    await createProduct(db, { actor, ...p, price: int(p.price), cost: int(p.cost), stock: int(p.stock), minStock: int(p.minStock) });
+    return "Producto creado.";
+  });
+}
+
+export async function adminAddPrice(p: { productId: string; validFrom: string; price: number; cost: number }) {
+  return run(async (actor) => {
+    await addProductPrice(db, { actor, ...p, price: int(p.price), cost: int(p.cost) });
+    return "Precio guardado.";
+  });
+}
+
+export async function adminAdjustStock(p: { productId: string; mode: "SET" | "ADD"; quantity: number; reason: string }) {
+  return run(async (actor) => {
+    const r = await adjustStock(db, { actor, ...p, quantity: Number(p.quantity) });
+    return `Stock: ${r.before} → ${r.after}`;
+  });
+}
+
+export async function adminProductSettings(p: { productId: string; minStock?: number; active?: boolean }) {
+  return run(async (actor) => {
+    await updateProductSettings(db, { actor, ...p });
+    return "Guardado.";
   });
 }

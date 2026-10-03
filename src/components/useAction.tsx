@@ -13,13 +13,13 @@ export function useAction() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  const run = (fn: () => Promise<ActionResult>, after?: () => void) =>
+  const run = (fn: () => Promise<ActionResult>, after?: (r: Extract<ActionResult, { ok: true }>) => void) =>
     start(async () => {
       try {
         const r = await fn();
         if (r.ok) {
           setMsg(r.message ? { ok: true, text: r.message } : null);
-          after?.();
+          after?.(r);
         } else setMsg({ ok: false, text: r.error });
       } catch {
         setMsg({ ok: false, text: "No hay conexión con el servidor. Revisá la señal y reintentá: no se guardó nada." });
