@@ -26,10 +26,12 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  rules    BarberRule[]
-  sales    Sale[]
-  closes   CashClose[]
-  members  Member[]
+  rules       BarberRule[]
+  sales       Sale[]
+  members     Member[]
+  accounts    PaymentAccount[]
+  settlements BarberSettlement[]
+  boxEntries  CashBoxEntry[]
 }
 
 // Comisión y descuento de bebida por barbero, con vigencia. Nunca fijos en el código.
@@ -76,7 +78,7 @@ model Product {
 }
 
 model ProductPrice {
-  id        String  @id @default(cuid())
+  id        String @id @default(cuid())
   productId String
   validFrom String
   price     Int // precio de venta
@@ -115,38 +117,128 @@ model Sale {
   @@index([date, userId])
 }
 
-// Cierre de caja. userId null = cierre del local (la planilla histórica tiene un solo cierre por día).
+// Cierre de caja: UNO POR DÍA para todo el local (decisión del dueño, septiembre 2026).
+// expected* sale de las ventas; declared* lo carga quien cierra. Si hay diferencia, la nota es obligatoria.
 model CashClose {
+  id                String    @id @default(cuid())
+  date              String    @unique
+  expectedIncome    Int // ingresos del día según ventas
+  expectedCash      Int? // null en datos históricos (sin medio de pago por venta)
+  expectedTransfers Int?
+  labor             Int // mano de obra calculada
+  expectedNet       Int // "dinero que debe haber" = ingresos − mano de obra
+  declaredCash      Int       @default(0)
+  declaredTransfers Int       @default(0)
+  declaredTotal     Int // cobros declarados (efectivo + transferencias), sin cambio dejado
+  changeLeft        Int       @default(0) // cambio (fondo) que queda en la caja para el día siguiente
+  difference        Int // declaredTotal − expectedIncome (negativo = falta)
+  note              String?
+  status            String    @default("OPEN") // OPEN | CLOSED
+  source            String    @default("APP")
+  closedAt          DateTime?
+  closedById        String?
+  reopenedAt        DateTime?
+  reopenedById      String?
+  reopenReason      String?
+  createdAt         DateTime  @default(now())
+  deletedAt         DateTime?
+
+  lines      CashCloseLine[]
+  boxEntries CashBoxEntry[]
+}
+
+// Cuentas por las que entra plata. ownerUserId = cuenta propia de un barbero (lo que entra ahí "ya lo cobró" él).
+model PaymentAccount {
+  id          String    @id @default(cuid())
+  key         String    @unique // BRUBANK | BRUBANK_JUAN | MP_JERE | EFECTIVO ...
+  name        String
+  kind        String // EFECTIVO | TRANSFERENCIA
+  ownerUserId String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  owner User? @relation(fields: [ownerUserId], references: [id])
+}
+
+// Fila de efectivo acumulado: cada cierre suma el efectivo del día; los retiros de barberos y las rendiciones al dueño restan.
+// El saldo es la suma de `amount` (con signo) de las filas vigentes.
+model CashBoxEntry {
   id             String    @id @default(cuid())
   date           String
-  userId         String?
-  expectedIncome Int // ingresos del día según ventas
-  labor          Int // mano de obra calculada
-  expectedNet    Int // "dinero que debe haber" = ingresos − mano de obra
-  declaredTotal  Int // cobros declarados (sin cambio dejado)
-  changeLeft     Int       @default(0)
-  difference     Int // declaredTotal − expectedIncome
+  kind           String // CIERRE | RETIRO_BARBERO | RENDICION | AJUSTE
+  amount         Int // + entra a la caja, − sale
+  closeId        String?
+  userId         String? // barbero (retiro) o quien rindió
+  receivedBy     String? // quién recibió la rendición
+  expectedAmount Int? // en RENDICION: saldo que debía haber al rendir
   note           String?
-  status         String    @default("OPEN") // OPEN | CLOSED
-  source         String    @default("APP")
-  closedAt       DateTime?
-  closedById     String?
-  reopenedAt     DateTime?
-  reopenedById   String?
-  reopenReason   String?
+  createdById    String?
   createdAt      DateTime  @default(now())
   deletedAt      DateTime?
 
-  user  User?           @relation(fields: [userId], references: [id])
-  lines CashCloseLine[]
+  close CashClose? @relation(fields: [closeId], references: [id])
+  user  User?      @relation(fields: [userId], references: [id])
 
-  @@unique([date, userId])
+  @@index([date])
+}
+
+// Compensación de fin de mes por barbero: lo que le corresponde cobrar (servicios + membresías) contra lo que ya cobró.
+model BarberSettlement {
+  id              String    @id @default(cuid())
+  userId          String
+  period          String // YYYY-MM
+  laborServices   Int
+  laborMembership Int
+  adjustments     Int       @default(0)
+  collected       Int // retiros en efectivo + transferencias a su cuenta propia
+  balance         Int // laborServices + laborMembership + adjustments − collected; + = el local le debe, − = él debe al local
+  status          String    @default("DRAFT") // DRAFT | CONFIRMED
+  note            String?
+  confirmedAt     DateTime?
+  confirmedById   String?
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, period])
+}
+
+// Día en que el local no abrió (feriado, vacaciones): evita la alerta de "día sin cierre".
+model ClosedDay {
+  id          String    @id @default(cuid())
+  date        String    @unique
+  reason      String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+// Alertas derivadas del estado de la caja. `key` evita duplicarlas; resolvedAt se completa cuando ya no aplican.
+model Alert {
+  id         String    @id @default(cuid())
+  key        String    @unique
+  code       String
+  severity   String // INFO | WARN | ERROR
+  audience   String // roles separados por coma: BARBERO,ADMIN,DUENO
+  date       String?
+  message    String
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+  ackById    String?
+  ackAt      DateTime?
 }
 
 model CashCloseLine {
   id      String @id @default(cuid())
   closeId String
-  account String // BRUBANK | BRUBANK_JUAN | MP_JERE | EFECTIVO | MEMBRESIA_EFECTIVO | MEMBRESIA_BANCO
+  account String // key de PaymentAccount (más MEMBRESIA_EFECTIVO / MEMBRESIA_BANCO en datos históricos)
   amount  Int
 
   close CashClose @relation(fields: [closeId], references: [id])
@@ -205,10 +297,10 @@ model Member {
   createdAt   DateTime  @default(now())
   deletedAt   DateTime?
 
-  user    User?          @relation(fields: [userId], references: [id])
-  prices  MemberPrice[]
-  ledger  MemberLedger[]
-  sales   Sale[]
+  user   User?          @relation(fields: [userId], references: [id])
+  prices MemberPrice[]
+  ledger MemberLedger[]
+  sales  Sale[]
 }
 
 model MemberPrice {
@@ -239,14 +331,14 @@ model MemberLedger {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  at        DateTime @default(now())
-  userId    String?
-  entity    String
-  entityId  String
-  action    String // CREATE | UPDATE | DELETE | CLOSE | REOPEN | IMPORT
-  before    String?
-  after     String?
+  id       String   @id @default(cuid())
+  at       DateTime @default(now())
+  userId   String?
+  entity   String
+  entityId String
+  action   String // CREATE | UPDATE | DELETE | CLOSE | REOPEN | IMPORT
+  before   String?
+  after    String?
 
   @@index([entity, entityId])
 }
@@ -262,7 +354,7 @@ model ImportBatch {
 
 // Diferencias y rarezas detectadas en la planilla. Se informan, nunca se corrigen en silencio.
 model ImportIssue {
-  id       String   @id @default(cuid())
+  id       String  @id @default(cuid())
   batchId  String
   severity String // INFO | WARN | ERROR
   code     String
