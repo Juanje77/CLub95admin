@@ -1,17 +1,32 @@
 # Club 95 — sistema de gestión
 
 Reemplaza la planilla `CLUB95_GESTION_ALE.xlsx`: caja diaria, gastos, membresías y panel del dueño.
-Estado: **etapa 1 (modelo de datos, motor de cálculo, importación de septiembre 2026) + reglas de cierre diario, efectivo acumulado, compensación mensual y alertas**. Las pantallas de Caja, Gastos, Membresías y Panel vienen en las etapas siguientes.
+Estado: **etapa 1** (modelo, motor de cálculo, importación de septiembre 2026, reglas de cierre/efectivo/compensación/alertas) y **etapa 2: Caja diaria** (app web móvil). Gastos, Membresías y Panel del dueño vienen en las etapas siguientes.
 
 ## Cómo correrlo
 
 ```bash
 npm install
-cp .env.example .env        # DATABASE_URL (SQLite en desarrollo)
+cp .env.example .env        # DATABASE_URL (SQLite en desarrollo) y SESSION_SECRET
 npx prisma db push          # crea la base
-npm test                    # tests del motor de cálculo, PIN e importación
+npm run seed                # usuarios de ejemplo, tarifas, cuentas y productos
+npm run dev                 # http://localhost:3000  (en el celular: la IP de tu PC, misma red wifi)
+npm test                    # tests del motor de cálculo, servicios, PIN y sesión
 npm run typecheck
 ```
+
+En producción hay que definir `SESSION_SECRET` (mínimo 16 caracteres; sin eso la app no arranca) y correr `npm run build && npm start`.
+La app se puede instalar en el celular como PWA ("Agregar a la pantalla de inicio").
+
+### Prueba de punta a punta (navegador móvil)
+
+```bash
+npm run build
+SESSION_SECRET=algo-largo-1234 DATABASE_URL=file:/tmp/e2e.db npx next start -p 3100 &
+BASE_URL=http://localhost:3100 CHROME=/ruta/a/chrome SHOTS=/tmp/shots npm run e2e
+```
+
+Recorre: login (y PIN incorrecto), carga de servicios, deshacer, bebidas, socio, cierre con y sin diferencia, caja cerrada bloqueada, cobertura de retiros, efectivo acumulado, reapertura y alertas, y deja capturas.
 
 ### Importar un mes de la planilla
 
@@ -36,6 +51,20 @@ Soporta las hojas con la estructura de ABR-26 a OCT-26; ENE a MAR tienen otra es
 
 Todo vive en tablas con vigencia por fecha (`Tariff`, `BarberRule`, `ProductPrice`), no en el código.
 Las reglas de arranque están en `src/import/rules.ts`.
+
+## Pantallas (etapa 2)
+
+| Pantalla | Quién | Qué hace |
+|---|---|---|
+| Login | todos | Usuario + PIN. 5 intentos fallidos bloquean la cuenta 10 minutos. Sesión de 12 horas en cookie firmada. |
+| Hoy | barbero / admin | Botones grandes por servicio con el precio vigente; medio de pago (transferencia por defecto, efectivo, MP); visita de socio; venta de bebidas/productos con stock; deshacer la última; resumen y ventas del día. El admin puede mirar y cargar otro día y elegir el barbero. |
+| Cierre | barbero / admin | Muestra lo que tiene que haber, calcula la diferencia en vivo, exige nota si no cuadra y bloquea el día al cerrar. El admin reabre con motivo. |
+| Efectivo | barbero / admin | El barbero ve cuánto puede retirar hoy en efectivo. El admin ve la fila acumulada, registra rendiciones y retiros. |
+| Alertas | barbero / admin | Las alertas que le corresponden por rol; el admin puede marcar un día como "no abrimos". |
+
+Las reglas (quién puede cargar qué, día cerrado, día pasado) viven en `src/services/*` y están cubiertas por tests; las pantallas solo las invocan.
+
+**Pendiente de esta etapa:** la carga offline. Hoy, si no hay señal, la app avisa que no se guardó nada y hay que reintentar; una cola de operaciones sin conexión se agrega como mejora.
 
 ## Cierre de caja diario
 
@@ -83,6 +112,7 @@ La parte de membresías se carga a mano hasta que esté el módulo de Membresía
 | `RENDICION_ATRASADA` | 7 días o más sin rendir con saldo positivo | aviso | admin, dueño |
 | `RENDICION_CON_DIFERENCIA` | Lo entregado no coincide con el saldo | error | admin, dueño |
 | `RETIRO_EFECTIVO_EXCEDE` | Un barbero retiró efectivo estando cubierto por el banco (o más que el faltante) | aviso | admin, dueño |
+| `STOCK_BAJO` | Un producto activo llegó al stock mínimo | aviso | admin, dueño |
 | `LIQUIDACION_PENDIENTE` | El mes anterior sin compensación confirmada (error desde el día 10) | aviso / error | admin, dueño |
 
 Configuración en la tabla `Setting` (clave `alerts`, JSON). Valores por defecto:
