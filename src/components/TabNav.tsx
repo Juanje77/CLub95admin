@@ -10,7 +10,7 @@ export default function TabNav({ admin, alertCount }: { admin: boolean; alertCou
         { href: "/", label: "Planilla" },
         { href: "/socios", label: "Socios" },
         { href: "/gastos", label: "Gastos" },
-        { href: "/efectivo", label: "Efectivo" },
+        { href: "/panel", label: "Panel" },
         { href: "/alertas", label: "Alertas" },
         { href: "/mas", label: "Más" },
       ]

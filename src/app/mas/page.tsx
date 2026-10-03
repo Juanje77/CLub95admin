@@ -5,6 +5,8 @@ import { requireAdmin } from "../../lib/auth";
 export const dynamic = "force-dynamic";
 
 const ITEMS: { href: string; title: string; text: string }[] = [
+  { href: "/panel", title: "Panel del dueño", text: "Resumen mensual, comparativo, ranking, días fuertes y flojos, descuadres. Exporta a Excel y PDF." },
+  { href: "/efectivo", title: "Efectivo", text: "Fila de efectivo acumulado, retiros de barberos y rendición al dueño." },
   { href: "/config", title: "Configuración", text: "Equipo y comisiones, tarifas, productos y stock, PIN de cada usuario." },
 ];
 

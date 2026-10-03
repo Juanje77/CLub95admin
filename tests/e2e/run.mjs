@@ -88,8 +88,12 @@ await shot("dia-cerrado");
 await page.getByRole("button", { name: "Salir" }).click();
 await page.waitForURL(/login/);
 await login("ale", "2222");
-await page.getByRole("link", { name: "Efectivo" }).click();
-await page.getByText("Efectivo acumulado en la caja").waitFor();
+const adminEfectivo = async () => {
+  await page.getByRole("link", { name: "Más" }).click();
+  await page.getByRole("link", { name: /^Efectivo/ }).click();
+  await page.getByText("Efectivo acumulado en la caja").waitFor();
+};
+await adminEfectivo();
 check(/Efectivo acumulado en la caja\s*\$ 12\.000/.test(await page.locator("body").innerText()), "el efectivo del cierre quedó en la fila acumulada ($ 12.000)");
 await page.getByRole("link", { name: "Planilla" }).click();
 await page.getByRole("heading", { name: /octubre 2026/i }).waitFor();
@@ -103,8 +107,7 @@ await page.getByLabel(/Motivo de la reapertura/).fill("Faltó cargar un corte");
 await page.getByRole("button", { name: "Reabrir caja" }).click();
 await cell("Lucio|CORTE").waitFor();
 check(true, "el admin reabre el día con motivo y vuelve a ser editable");
-await page.getByRole("link", { name: "Efectivo" }).click();
-await page.getByText("Efectivo acumulado en la caja").waitFor();
+await adminEfectivo();
 check(/Efectivo acumulado en la caja\s*\$ 0/.test(await page.locator("body").innerText()), "al reabrir, el efectivo sale de la fila acumulada");
 
 // 8. Navegación entre meses y alertas
@@ -199,6 +202,21 @@ await page.getByText("Ingreso cargado.").waitFor();
 await page.waitForFunction(() => /Total del mes\s*\$ 120\.000/.test(document.body.innerText));
 check(true, "los otros ingresos (publicidad) se cargan por mes");
 
+// 9b. Panel del dueño: cifras del mes, Excel y permisos
+await page.getByRole("link", { name: "Panel" }).click();
+await page.getByRole("heading", { name: /Panel · octubre 2026/i }).waitFor();
+const stmt = (label) => page.locator("table.stmt tr", { hasText: label }).last().locator("td").last();
+check((await stmt("Total ingresos").innerText()).trim() === "$ 341.700", "panel: total ingresos = servicios + socios + bebida + cera + publicidad");
+check((await stmt("Total mano de obra").innerText()).trim() === "$ 104.400", "panel: mano de obra de servicios y de socios");
+check((await stmt("Resultado final").innerText()).trim() === "−$ 590.883", "panel: resultado final del mes (con el alquiler cargado)");
+await page.getByText("Ingresos por mes").waitFor();
+check((await page.locator(".hbars .bar").count()) >= 6, "panel: el comparativo dibuja las barras de los meses");
+const xl = await page.request.get(BASE + "/api/export?tipo=panel&mes=" + TODAY.slice(0, 7));
+check(xl.status() === 200 && (xl.headers()["content-type"] ?? "").includes("spreadsheetml"), "panel: se descarga el Excel (solo con sesión de admin)");
+const xl2 = await page.request.get(BASE + "/api/export?tipo=planilla&mes=" + TODAY.slice(0, 7));
+check(xl2.status() === 200, "la planilla del mes también se exporta a Excel");
+await shot("panel");
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más" }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();
@@ -234,6 +252,12 @@ await page.waitForURL(/login/);
 await login("jere", newPin);
 await page.waitForURL(BASE + "/");
 check(true, "el barbero entra con el PIN que le generó el admin");
+
+// 10b. Un barbero no entra al panel ni a las exportaciones
+await page.goto(BASE + "/panel");
+check(page.url() === BASE + "/", "un barbero que abre /panel vuelve a la planilla");
+check((await page.request.get(BASE + "/api/export?tipo=panel")).status() === 401, "un barbero no puede descargar el Excel del panel");
+check((await page.request.get(BASE + "/api/comprobante/x")).status() === 401, "un barbero no puede ver comprobantes");
 
 // 11. Socios vistos por un barbero: solo hoy, sin importes
 await page.getByRole("link", { name: "Socios" }).click();

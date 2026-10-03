@@ -69,9 +69,9 @@ input, select, textarea { width: 100%; font: inherit; padding: 12px; border-radi
 .toast.err { background: var(--err); color: #fff; }
 nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--line); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
 nav.tabs .inner { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; width: 100%; max-width: 640px; }
-nav.tabs a { text-align: center; padding: 12px 2px; text-decoration: none; font-size: .76rem; color: var(--muted); font-weight: 600; position: relative; }
+nav.tabs a { text-align: center; padding: 16px 2px 10px; text-decoration: none; font-size: .76rem; color: var(--muted); font-weight: 600; position: relative; }
 nav.tabs a[aria-current="page"] { color: var(--ink); box-shadow: inset 0 3px 0 var(--gold); }
-nav.tabs .badge { position: absolute; top: 3px; right: 2px; margin: 0; background: var(--err); color: #fff; border-radius: 999px; font-size: .7rem; padding: 1px 6px; }
+nav.tabs .badge { position: absolute; top: 1px; left: 50%; margin: 0 0 0 10px; background: var(--err); color: #fff; border-radius: 999px; font-size: .62rem; padding: 0 5px; line-height: 1.5; }
 .diff { font-size: 1.4rem; font-weight: 800; }
 .diff.ok { color: var(--ok); } .diff.err { color: var(--err); }
 .login { max-width: 360px; margin: 12vh auto 0; padding: 0 16px; }
@@ -132,3 +132,39 @@ button.att.on { background: var(--ok-bg); }
 button.att:disabled { cursor: default; opacity: .6; }
 button.att:not(:disabled):hover { background: var(--line); }
 table.grid tr.inactive th, table.grid tr.inactive td { opacity: .55; }
+
+/* --- Panel del dueño: gráficas (validadas: azul/rojo, ΔE ≥ 29, contraste ≥ 3:1 sobre la superficie) --- */
+:root { --viz-1: #2a78d6; --viz-neg: #e34948; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --viz-1: #3987e5; --viz-neg: #e66767; } }
+.hbars { display: grid; gap: 6px; }
+.hb { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; }
+.hb .lab { font-size: .8rem; color: var(--muted); text-transform: capitalize; }
+.hb .track { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hb .bar { height: 20px; border-radius: 0 4px 4px 0; background: var(--viz-1); min-width: 2px; flex: none; max-width: calc(100% - 96px); }
+.hb .val { font-size: .8rem; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hb.dvrow { grid-template-columns: 84px 1fr auto; }
+.hb .dv { position: relative; height: 24px; display: block; }
+.hb .dv .zero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.hb .dv .bar { position: absolute; top: 2px; height: 20px; max-width: none; }
+.hb .bar.pos { background: var(--viz-1); border-radius: 0 4px 4px 0; }
+.hb .bar.neg { background: var(--viz-neg); border-radius: 4px 0 0 4px; }
+.hb.dvrow .val { text-align: right; }
+table.stmt { width: 100%; border-collapse: collapse; font-size: .92rem; }
+table.stmt td { padding: 6px 0; border-bottom: 1px solid var(--line); }
+table.stmt td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.stmt tr.sec td { text-align: left !important; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 800; padding-top: 14px; border-bottom: 0; }
+table.stmt tr.tot td { font-weight: 800; }
+table.stmt tr.fin td { font-weight: 800; font-size: 1.05rem; border-top: 2px solid var(--ink); }
+table.stmt td.sub { padding-left: 14px; color: var(--muted); }
+table.mini { width: 100%; border-collapse: collapse; font-size: .85rem; }
+table.mini th, table.mini td { padding: 5px 4px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+table.mini th:first-child, table.mini td:first-child { text-align: left; }
+.delta { font-size: .8rem; color: var(--muted); }
+@media print {
+  nav.tabs, header.top .row, .noprint, .toast { display: none !important; }
+  body { background: #fff; color: #000; }
+  main, main.wide { max-width: none; padding: 0; }
+  .card { break-inside: avoid; border-color: #bbb; }
+  details > summary { display: none; }
+  details[open] > *, details > * { display: block; }
+}
