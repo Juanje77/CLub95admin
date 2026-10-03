@@ -52,13 +52,17 @@ const ACCOUNTS: { key: string; name: string; kind: string; owner?: string }[] = 
   { key: "MEMBRESIA_BANCO", name: "Membresía por Brubank/MP", kind: "TRANSFERENCIA" },
 ];
 
-export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAULT_CATALOG): Promise<Record<BarberKey, string>> {
+/** PIN por usuario. Por defecto los de ejemplo (solo desarrollo); en producción se generan al azar (`--random-pins`). */
+export type PinMap = Record<"jere" | "ale" | "beni" | "lucio" | "dueno", string>;
+export const DEFAULT_PINS: PinMap = { jere: "1111", ale: "2222", beni: "3333", lucio: "4444", dueno: "9999" };
+
+export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAULT_CATALOG, pins: PinMap = DEFAULT_PINS): Promise<Record<BarberKey, string>> {
   const ids = {} as Record<BarberKey, string>;
   for (const u of SEED_USERS) {
     const user = await db.user.upsert({
       where: { username: u.username },
       update: {},
-      create: { username: u.username, name: u.name, role: u.role, isBarber: true, active: u.active, pinHash: hashPin(u.pin) },
+      create: { username: u.username, name: u.name, role: u.role, isBarber: true, active: u.active, pinHash: hashPin(pins[u.username as keyof PinMap] ?? u.pin) },
     });
     ids[u.key] = user.id;
     for (const r of SYSTEM_RULES[u.key]) {
@@ -72,7 +76,7 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
   const lucio = await db.user.upsert({
     where: { username: "lucio" },
     update: {},
-    create: { username: "lucio", name: "Lucio", role: "BARBERO", isBarber: true, pinHash: hashPin("4444") },
+    create: { username: "lucio", name: "Lucio", role: "BARBERO", isBarber: true, pinHash: hashPin(pins.lucio) },
   });
   // Lucio ocupa el puesto de Beni desde octubre con las mismas condiciones (60%, bebida de $3.000): confirmar.
   await db.barberRule.upsert({
@@ -83,7 +87,7 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
   await db.user.upsert({
     where: { username: "dueno" },
     update: {},
-    create: { username: "dueno", name: "Dueño", role: "DUENO", isBarber: false, pinHash: hashPin("9999") },
+    create: { username: "dueno", name: "Dueño", role: "DUENO", isBarber: false, pinHash: hashPin(pins.dueno) },
   });
   for (const a of ACCOUNTS) {
     const ownerId = a.owner ? (await db.user.findUnique({ where: { username: a.owner } }))?.id ?? null : null;

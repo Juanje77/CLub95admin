@@ -148,7 +148,41 @@ Cambiar los PIN antes de cualquier deploy.
 - `src/import/` — lectura de la planilla, verificación y carga.
 - `tests/` — Vitest.
 
-## Deploy
+## Deploy en Vercel
 
-Pendiente de definir hosting. Para producción hay que cambiar `provider = "sqlite"` por `"postgresql"` en el esquema
-y apuntar `DATABASE_URL` a la base (los "enums" son `String` justamente para que el cambio no toque el modelo).
+SQLite no sirve en Vercel (el disco es efímero), así que producción usa **Postgres**. El modelo es el mismo: `scripts/prisma-pg.mjs`
+deriva `prisma/schema.postgres.prisma` del esquema de desarrollo cambiando solo el proveedor. Desarrollo y tests siguen con SQLite.
+Probado de punta a punta contra Postgres 16 (tablas, seed, build y la prueba en navegador móvil).
+
+### Pasos (unos 10 minutos)
+
+1. **Base de datos:** en Vercel, *Storage → Create → Neon (Postgres)* y conectala al proyecto. Elegí la región **São Paulo** (la misma que usa la app, `gru1`).
+   Eso define `DATABASE_URL` (y suele definir `DATABASE_URL_UNPOOLED`).
+2. **Proyecto:** *Add New → Project → importar `Juanje77/CLub95admin`*, rama `claude/club95-management-system-8xn7lj` (o `main` cuando se mergee).
+   El build lo toma de `vercel.json` (`npm run vercel-build`: genera el cliente de Postgres, crea/actualiza las tablas con `prisma db push` y compila).
+3. **Variables de entorno** (*Settings → Environment Variables*, entorno Production):
+   - `DATABASE_URL`: la de la base (viene con la integración).
+   - `DIRECT_URL`: la conexión **sin pooler** (en Neon, la "unpooled"). Se usa para crear las tablas.
+   - `SESSION_SECRET`: una cadena larga al azar (`openssl rand -base64 32`). Sin esto la app no arranca.
+4. **Deploy.** Después, **una sola vez**, creá los usuarios y los datos base desde tu máquina apuntando a esa base:
+
+   ```bash
+   DATABASE_URL="<la de producción>" DIRECT_URL="<la sin pooler>" npm run seed:prod
+   ```
+
+   Genera PIN **al azar** para jere, ale, lucio y dueno y los imprime una sola vez (anotalos). Además fija como fecha de arranque de las alertas el día de hoy.
+   Si la base ya tiene usuarios, no cambia ningún PIN.
+5. Abrí la URL de Vercel en el celular y "Agregar a la pantalla de inicio".
+
+### Importar septiembre a producción (opcional)
+
+```bash
+DATABASE_URL="<la de producción>" npm run import:planilla -- --month 2026-09
+```
+
+(con la planilla en `data/planilla.xlsx`; necesita el cliente de Postgres: correr antes `node scripts/prisma-pg.mjs && npx prisma generate --schema prisma/schema.postgres.prisma`, y después `npx prisma generate` para volver al de desarrollo).
+
+### Notas
+
+- `prisma db push` corre en cada build: si un cambio del esquema fuera destructivo, el build **falla** en vez de borrar datos. Cuando haya datos reales conviene pasar a migraciones (`prisma migrate`).
+- Los datos de la planilla y `data/` no se suben al repositorio.

@@ -15,7 +15,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "e2e": "node tests/e2e/run.mjs"
+    "e2e": "node tests/e2e/run.mjs",
+    "vercel-build": "node scripts/prisma-pg.mjs && prisma generate --schema prisma/schema.postgres.prisma && prisma db push --schema prisma/schema.postgres.prisma --skip-generate && next build",
+    "seed:prod": "node scripts/prisma-pg.mjs && prisma generate --schema prisma/schema.postgres.prisma && tsx src/seed-cli.ts --random-pins"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
