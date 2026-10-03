@@ -1,7 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
-import { verifyPin } from "../auth/pin";
+import { hashPin, verifyPin } from "../auth/pin";
 import type { Role } from "../domain/types";
 import { DomainError, type Actor } from "./common";
+
+let dummyHash: string | null = null;
 
 export const MAX_FAILED_ATTEMPTS = 5;
 export const LOCK_MINUTES = 10;
@@ -17,7 +19,11 @@ export async function loginWithPin(db: PrismaClient, username: string, pin: stri
   const user = await db.user.findUnique({ where: { username: username.trim().toLowerCase() } });
   // Mismo mensaje para usuario inexistente, inactivo o PIN malo: no se revela cuál falló.
   const invalid = new DomainError("CREDENCIALES_INVALIDAS", "Usuario o PIN incorrecto.");
-  if (!user || user.deletedAt || !user.active) throw invalid;
+  if (!user || user.deletedAt || !user.active) {
+    // Se hace el mismo trabajo que con un usuario real, para que el tiempo de respuesta no revele qué usuarios existen.
+    verifyPin(pin, (dummyHash ??= hashPin("0000")));
+    throw invalid;
+  }
   if (user.lockedUntil && user.lockedUntil > now) {
     const mins = Math.ceil((user.lockedUntil.getTime() - now.getTime()) / 60000);
     throw new DomainError("CUENTA_BLOQUEADA", `Demasiados intentos. Probá de nuevo en ${mins} minuto${mins === 1 ? "" : "s"}.`);

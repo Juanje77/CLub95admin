@@ -1,121 +1,97 @@
 # Club 95 — sistema de gestión
 
-Reemplaza la planilla `CLUB95_GESTION_ALE.xlsx`: caja diaria, gastos, membresías y panel del dueño.
-Estado: **etapa 1** (modelo, motor de cálculo, importación de septiembre 2026, reglas de cierre/efectivo/compensación/alertas) y **etapa 2: Caja diaria** (app web móvil, con la misma forma de trabajo que la planilla). Gastos, Membresías y Panel del dueño vienen en las etapas siguientes.
+Reemplaza la planilla `CLUB95_GESTION_ALE.xlsx`. Se usa desde el celular (instalable como app) y mantiene **la misma forma de trabajo que la planilla**: los días van en columnas y solo se cargan **cantidades**; el resto se calcula.
 
-## Cómo correrlo
+| Módulo | Para qué | Quién |
+|---|---|---|
+| **Planilla** | Cantidad de servicios, socios, bebidas y ceras de cada día; control del día (ingresos, mano de obra, dinero que debe haber, **ganancia del día**); dinero ingresado y cierre de caja | barberos (lo suyo, hoy) · admin/dueño (todo) |
+| **Socios** | Asistencia mensual de los socios, cuenta corriente (debe/haber/saldo), cobros y ajustes con motivo | barberos tildan hoy · admin/dueño todo |
+| **Gastos** | Alta rápida con foto del comprobante, conceptos, gastos fijos con recordatorio, otros ingresos | admin/dueño |
+| **Panel** | Resumen mensual tipo `TOTALES`, comparativo de 6 meses, ranking de barberos, días fuertes y flojos, descuadres. Excel y PDF | admin/dueño |
+| **Efectivo** | Fila de efectivo acumulado, retiros de barberos, rendición al dueño | barbero (su retiro) · admin/dueño |
+| **Alertas** | Todo lo que hay que atender para que la caja cierre todos los días | cada rol ve las suyas |
+| **Configuración** | Equipo y comisiones, tarifas, productos y stock, PIN de cada usuario | admin/dueño |
+| **Auditoría** | Quién cargó, modificó o borró cada cosa y cuándo | admin/dueño |
 
-```bash
-npm install
-cp .env.example .env        # DATABASE_URL (SQLite en desarrollo) y SESSION_SECRET
-npx prisma db push          # crea la base
-npm run seed                # usuarios de ejemplo, tarifas, cuentas y productos
-npm run dev                 # http://localhost:3000  (en el celular: la IP de tu PC, misma red wifi)
-npm test                    # tests del motor de cálculo, servicios, PIN y sesión
-npm run typecheck
-```
+Estado: **completo** según el pedido original (caja diaria, gastos, membresías, panel del dueño, auditoría, importación de la planilla, carga sin señal, deploy en Vercel). Lo que no está hecho se lista en [Límites conocidos](#límites-conocidos).
 
-En producción correr `npm run build && npm start` (ver más abajo el deploy en Vercel; `SESSION_SECRET` es recomendada, si no se define se deriva de la base).
-La app se puede instalar en el celular como PWA ("Agregar a la pantalla de inicio").
+---
 
-### Prueba de punta a punta (navegador móvil)
+## Cómo se usa (día a día)
 
-```bash
-npm run build
-SESSION_SECRET=algo-largo-1234 DATABASE_URL=file:/tmp/e2e.db npx next start -p 3100 &
-BASE_URL=http://localhost:3100 CHROME=/ruta/a/chrome SHOTS=/tmp/shots npm run e2e
-```
+1. **Entrar** con usuario y PIN. Cada uno puede cambiar su PIN en *Mi PIN*.
+2. **Planilla:** en la columna de hoy, escribir la cantidad (cortes, corte y barba, barba y cejas, socios, bebidas, ceras) y tocar afuera o Enter. Se guarda solo.
+   Si no hay señal, el número queda marcado como pendiente y se envía cuando vuelve la conexión.
+3. **Al cerrar el día:** cargar el dinero ingresado (efectivo, Brubank, Brubank Juan, Mercado Pago) y el cambio dejado; tocar el número del día y **Cerrar el día**. Si hay diferencia, la nota es obligatoria.
+4. **Socios:** tildar a los socios que vinieron hoy.
+5. **El fin de semana (admin/dueño):** en *Más → Efectivo*, rendir el efectivo acumulado.
+6. **A fin de mes (admin/dueño):** revisar el *Panel*, confirmar las compensaciones y exportar a Excel/PDF si hace falta.
 
-Recorre: login (y sin sesión), la planilla del mes, carga de cantidades (servicios, socios, bebida y cera), el control del día (ingresos, mano de obra, dinero que debe haber, ganancia), permisos por barbero y por día, dinero ingresado con diferencia y nota obligatoria, cierre del día, efectivo acumulado, carga de un día pasado por el admin, reapertura con motivo y navegación entre meses; deja capturas.
+Reglas de permisos: un barbero carga **lo suyo y solo hoy**; cargar un día pasado, o a nombre de otro, requiere admin/dueño. Un día cerrado no se edita: solo admin/dueño lo reabren, con motivo, y queda registrado.
 
-### Importar un mes de la planilla
-
-Dejá el xlsx en `data/planilla.xlsx` (la carpeta `data/` no se versiona) y:
-
-```bash
-npm run import:planilla -- --month 2026-09 --dry-run   # solo verifica y escribe el reporte
-npm run import:planilla -- --month 2026-09             # verifica y carga en la base
-```
-
-El reporte queda en `data/reports/import-AAAA-MM.md`. Importar de nuevo un mes da de baja lógica lo importado antes.
-El script **informa** las diferencias que encuentra en la planilla (códigos `WARN`/`ERROR`); no las corrige en silencio.
-Soporta las hojas con la estructura de ABR-26 a OCT-26; ENE a MAR tienen otra estructura y se agregan después.
+---
 
 ## Reglas de negocio vigentes (septiembre 2026)
 
 | | |
 |---|---|
 | Tarifas (iguales para todos) | Corte $ 20.000 · Corte y barba $ 22.000 · Barba y cejas $ 15.000 |
-| Bebida incluida (se descuenta antes de la comisión) | Jere $ 1.500 · Ale y Beni/Lucio $ 3.000 |
-| Comisión | Jere 60% · Beni/Lucio 60% (Lucio, desde octubre, con las mismas condiciones: a confirmar) · Ale 100% (administración): $ 17.000 / $ 19.000 por corte / corte y barba |
+| Bebida incluida (se descuenta antes de la comisión) | Jere $ 1.500 · Ale y Lucio $ 3.000 |
+| Comisión | Jere 60% · Lucio 60% (mismas condiciones que Beni, a confirmar) · Ale 100% (administración): $ 17.000 / $ 19.000 por corte / corte y barba |
+| Membresía | $ 15.000 (corte) / $ 16.500 (corte y barba) **por visita**; el barbero cobra (precio − bebida) × su comisión |
 
-Todo vive en tablas con vigencia por fecha (`Tariff`, `BarberRule`, `ProductPrice`), no en el código.
-Las reglas de arranque están en `src/import/rules.ts`.
+Nada de esto está fijo en el código: vive en tablas con **vigencia por fecha** (`Tariff`, `BarberRule`, `ProductPrice`, `MemberPrice`) y se cambia desde *Configuración*. Un cambio rige desde su fecha; el pasado no se reescribe (solo el dueño puede corregir hacia atrás).
+Moneda ARS sin decimales (`$ 12.500`), fechas `dd/mm/aaaa`, zona horaria `America/Argentina/Buenos_Aires`.
 
-## Pantallas (etapa 2)
+### Cómo se calcula el día (como la hoja mensual)
 
-La pantalla principal es **la planilla del mes**: los **días en columnas** y, en filas, lo mismo que la hoja de Excel. **Solo se cargan números** (cantidades); todo lo demás se calcula.
+- **Total ingresos** = servicios + bebidas sueltas + ceras/polvo/aceite.
+- **Mano de obra** de cada barbero = (precio − bebida) × su comisión, por servicio.
+- **Dinero que debe haber** = ingresos − mano de obra.
+- **Ganancia del día** = parte del local en los servicios + margen de la bebida incluida + margen de las bebidas sueltas + margen de ceras/polvo/aceite. Las membresías se liquidan aparte.
+- **Diferencia de caja** = dinero ingresado − (ingresos + cobros de socios del día). El cambio dejado **no** es ingreso.
 
-| Bloque de la grilla | Qué se carga | Qué se calcula |
-|---|---|---|
-| Un bloque por barbero (Jere, Ale, Lucio) | Cantidad de **cortes**, **corte y barba**, **barba y cejas** y **socios (membresía)** del día | Generado y mano de obra de ese barbero |
-| Bebidas (sin corte) | Cantidad vendida de cada bebida | |
-| Ceras, polvo y aceite | Cantidad vendida de cada producto (descuenta stock) | |
-| **Control del día** | | Ingresos por servicios, bebidas/ceras, **total ingresos**, mano de obra, **dinero que debe haber**, costos y **GANANCIA DEL DÍA** |
-| Dinero ingresado | Efectivo, Brubank, Brubank Juan, Mercado Pago, cambio dejado | Total ingresado y **diferencia de caja** (✓ si cuadra) |
+### Cómo se calcula el mes (Panel)
 
-- Escribís la cantidad, tocás afuera (o Enter) y se guarda. Una columna "Mes" suma todo, y arriba están los totales del mes (ingresos, mano de obra, ganancia).
-- Tocás el número del día y abajo aparece su resumen con el botón **Cerrar el día** (con nota obligatoria si hay diferencia). Un día cerrado queda bloqueado; el admin lo reabre con motivo.
-- **Ganancia del día** (como la hoja): parte del local en los servicios (precio − bebida − mano de obra) + margen de la bebida incluida + margen de las bebidas sueltas + margen de ceras/polvo/aceite. Las membresías se liquidan aparte (compensación de fin de mes).
-- Cada barbero carga **lo suyo y solo el día de hoy**; ve todo el mes. El admin/dueño carga cualquier barbero y cualquier día pasado.
-- Ale y el dueño ven además el efectivo acumulado y las rendiciones.
+Mismas filas que la hoja `TOTALES`: cantidades · ingresos (cortes, membresías por visita, bebidas, ceras, publicidad, alquiler de yerba) · mano de obra por barbero · **libre** (ingresos − mano de obra) · costos · **margen bruto** · gastos variables, de estructura e inversiones · **resultado final**.
+Las compras de mercadería (`REPOSICION`) no restan del resultado: su costo ya está en "costos" por lo consumido.
 
-| Pantalla | Quién | Qué hace |
-|---|---|---|
-| Login | todos | Usuario + PIN. 5 intentos fallidos bloquean la cuenta 10 minutos. Sesión de 12 horas en cookie firmada. |
-| Planilla | barbero / admin | La grilla descripta arriba. |
-| Efectivo | barbero / admin | El barbero ve cuánto puede retirar hoy en efectivo. El admin ve la fila acumulada, registra rendiciones y retiros. |
-| Alertas | barbero / admin | Las alertas que le corresponden por rol; el admin puede marcar un día como "no abrimos". |
+---
 
-Las reglas (quién puede cargar qué, día cerrado, día pasado) viven en `src/services/*` y están cubiertas por tests; las pantallas solo las invocan.
+## Cierre de caja, efectivo y compensación
 
-**Pendiente de esta etapa:** la carga offline. Hoy, si no hay señal, la app avisa que no se guardó nada y hay que reintentar; una cola de operaciones sin conexión se agrega como mejora.
+- **Un cierre por día** para todo el local. Quien cierra declara el dinero ingresado; si no cuadra, nota obligatoria. Cerrado, no se edita.
+- **Fila de efectivo acumulado:** cada cierre suma el efectivo del día; los retiros de barberos y las rendiciones al dueño restan. Al rendir se compara lo entregado con el saldo (nota obligatoria si no coincide).
+- **Retiros en efectivo: el banco primero.** Los pagos son casi todos por transferencia y los barberos cobran de lo recaudado en el banco. Solo si el banco no cubrió lo que les corresponde ese día pueden completar con efectivo: el faltante es *mano de obra total − transferencias ingresadas* y se reparte en proporción. Un retiro por encima de eso exige un motivo y avisa al admin (`RETIRO_EFECTIVO_EXCEDE`).
+- **Compensación de fin de mes:** compara lo que le corresponde a cada barbero (servicios + membresías que atendió + ajustes) contra lo que ya cobró (retiros en efectivo + transferencias a su cuenta propia). Positivo: el local le debe; negativo: cobró de más. Queda en borrador hasta que el admin la confirma. La parte de membresías sale sola de la asistencia.
 
-## Cierre de caja diario
+## Membresías
 
-- **Un cierre por día** para todo el local (`CashClose`, único por fecha). Quien cierra declara efectivo, transferencias y cambio dejado.
-- El sistema calcula lo esperado desde las ventas (por medio de pago: casi todo es transferencia, algunos pagos son en efectivo) y la diferencia es `declarado − esperado`. **El cambio dejado no es ingreso**: no entra en la diferencia.
-- Con diferencia (o efectivo/transferencia cruzados aunque el total cierre) la **nota es obligatoria**. No se cierra con ventas sin medio de pago.
-- Cerrada, no se edita. Solo admin/dueño reabre, con **motivo**, y queda en la auditoría. Un barbero solo cierra el día de hoy; los días pasados requieren al admin.
-- Lógica en `src/domain/closing.ts` (pura, con tests) y `src/services/closing.ts` (transacciones y auditoría).
+- Cada socio tiene tipo (corte / corte y barba), barbero asignado y precio por visita con vigencia.
+- La **asistencia** se tilda por día; cada visita se cobra al precio vigente y suma al barbero que atendió.
+- **Cuenta corriente:** cargos (visitas × precio) − cobros ± ajustes = saldo. Los cobros llevan medio (efectivo / banco) y entran a la caja del día en que se registran. Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).
+- Se muestra cuánto aporta cada socio al barbero y al local. Si la asistencia no coincide con los "socios" que se cargaron en la planilla, aparece una nota de diferencias (no se corrige sola).
 
-### Fila de efectivo acumulado
+## Gastos
 
-Cada cierre **suma el efectivo del día** (`CashBoxEntry`, kind `CIERRE`). Los retiros de barberos (`RETIRO_BARBERO`) y las rendiciones al dueño (`RENDICION`) restan.
-El saldo es lo que tiene que estar en la caja cuando pasás el fin de semana; al rendir se compara lo entregado contra el saldo y, si no coincide, hace falta una nota y salta una alerta.
+- **Lista cerrada de conceptos** administrable (reemplaza al control "MAL CARGADO EL CONCEPTO"), con categoría: variable, estructura, inversión o reposición.
+- Alta rápida con fecha, concepto, monto, descripción y **foto del comprobante** (se reduce en el celular antes de subirla; solo la ve admin/dueño).
+- **Gastos fijos recurrentes** (alquiler, luz, internet…): avisan si no se cargaron pasado su día.
+- Filtros por mes y concepto, totales por categoría. Los gastos se borran con baja lógica y quedan en la auditoría.
+- **Otros ingresos** (publicidad, alquiler de yerba) por mes.
 
-### Retiros de barberos: el banco primero
-
-Los pagos son casi todos por transferencia y los barberos cobran de lo recaudado en el banco. **Solo si el banco no cubrió lo que les corresponde cobrar ese día pueden completar con efectivo** de la caja
-(`src/domain/coverage.ts`): el faltante del día es **mano de obra total − transferencias ingresadas** (las cuentas bancarias de la grilla) y se reparte entre los barberos en proporción a lo que les corresponde. Mientras el dinero del día no esté cargado no se sabe qué cubrió el banco y no se marca ningún retiro como excepción.
-Un retiro en efectivo por encima de ese faltante es una excepción: el sistema exige un motivo y deja la alerta `RETIRO_EFECTIVO_EXCEDE` para admin y dueño.
-
-### Compensación de fin de mes
-
-Los barberos van cobrando durante el mes. A fin de mes `computeSettlement` compara **lo que les corresponde** (servicios + membresías + ajustes) contra **lo que ya cobraron** (retiros en efectivo + transferencias a su cuenta propia, p. ej. MP de Jere).
-`balance > 0`: el local le debe; `balance < 0`: cobró de más y devuelve. Queda en borrador hasta que el admin la confirma.
-La parte de membresías se carga a mano hasta que esté el módulo de Membresías.
+---
 
 ## Alertas
 
-`npm run alerts` calcula las alertas con el estado actual y las guarda en la tabla `Alert` (sin duplicar; se resuelven solas cuando la situación se arregla). Pensado para correr cada ~15 minutos.
+Se recalculan al abrir cada pantalla y se guardan en la tabla `Alert` (sin duplicar; se resuelven solas cuando la situación se arregla). `npm run alerts` las imprime.
 
 | Código | Cuándo | Gravedad | Quién |
 |---|---|---|---|
 | `CIERRE_PENDIENTE_HOY` | Hay ventas hoy y pasó la hora de aviso sin cerrar | aviso | barbero, admin |
 | `CIERRE_ATRASADO` | Un día anterior con ventas quedó sin cerrar (a los 2 días suma al dueño) | error | barbero, admin (+dueño) |
 | `DIA_SIN_MOVIMIENTO` | Martes a sábado sin ventas ni cierre ni marca de "no abrió" | aviso | admin (+dueño) |
-| `VENTAS_SIN_MEDIO_DE_PAGO` | Ventas del día sin medio de pago: no se puede cerrar | aviso | barbero, admin |
+| `VENTAS_SIN_MEDIO_DE_PAGO` | Ventas cargadas una por una sin medio de pago: no se puede cerrar | aviso | barbero, admin |
 | `CIERRE_REABIERTO` | Se reabrió una caja y no se volvió a cerrar | aviso | todos |
 | `CIERRE_CON_DESCUADRE` | La caja cerró con faltante o sobrante (error desde el umbral) | aviso / error | admin, dueño |
 | `DESCUADRE_SIN_NOTA` | Hay diferencia sin nota explicativa | error | admin, dueño |
@@ -128,6 +104,9 @@ La parte de membresías se carga a mano hasta que esté el módulo de Membresía
 | `RENDICION_CON_DIFERENCIA` | Lo entregado no coincide con el saldo | error | admin, dueño |
 | `RETIRO_EFECTIVO_EXCEDE` | Un barbero retiró efectivo estando cubierto por el banco (o más que el faltante) | aviso | admin, dueño |
 | `STOCK_BAJO` | Un producto activo llegó al stock mínimo | aviso | admin, dueño |
+| `GASTO_FIJO_PENDIENTE` | Un gasto fijo del mes venció y no está cargado | aviso | admin, dueño |
+| `SOCIO_CON_DEUDA` | Un socio sigue debiendo de meses anteriores pasado el día de vencimiento | aviso | admin, dueño |
+| `SOCIO_SIN_VENIR` | Un socio activo no viene hace 30 días o más | info | admin, dueño |
 | `LIQUIDACION_PENDIENTE` | El mes anterior sin compensación confirmada (error desde el día 10) | aviso / error | admin, dueño |
 
 Configuración en la tabla `Setting` (clave `alerts`, JSON). Valores por defecto:
@@ -135,59 +114,72 @@ Configuración en la tabla `Setting` (clave `alerts`, JSON). Valores por defecto
 ```json
 { "closeReminderTime": "20:30", "requiredDays": [2,3,4,5,6], "descuadreErrorThreshold": 5000, "minChange": 5000,
   "boxMaxBalance": 200000, "boxMaxDays": 7, "cashShareWarn": 0.5, "cashShareMinTotal": 50000,
-  "settlementErrorDay": 10, "startDate": null }
+  "settlementErrorDay": 10, "startDate": null, "memberInactiveDays": 30, "memberDebtDay": 10 }
 ```
 
-`startDate` es la fecha de arranque del sistema: **hay que configurarla el día que se empieza a usar**, si no los días anteriores sin datos generan alertas de "sin movimiento".
-Los días que no se abre (feriados, vacaciones) se marcan con `markClosedDay`.
+`startDate` es la fecha de arranque: los días anteriores no generan alertas. El primer deploy la fija en el día de arranque. Los feriados o días sin atender se marcan desde la pantalla de alertas ("No abrimos ese día").
 
-## Usuarios de ejemplo (solo desarrollo)
+---
+
+## Cómo correrlo
+
+```bash
+npm install
+cp .env.example .env        # DATABASE_URL (SQLite en desarrollo); SESSION_SECRET es opcional
+npx prisma db push          # crea la base
+npm run seed                # usuarios de ejemplo, tarifas, cuentas, productos y conceptos de gasto
+npm run dev                 # http://localhost:3000  (en el celular: la IP de tu PC, misma red wifi)
+npm test                    # tests (lógica, servicios, importación, cola sin señal)
+npm run typecheck
+npm run e2e                 # prueba en navegador móvil, arma su propia base (necesita CHROME=/ruta/a/chrome)
+```
+
+### Usuarios de ejemplo (solo desarrollo)
 
 | usuario | PIN | rol |
 |---|---|---|
-| jere | 1111 | barbero |
-| ale | 2222 | admin (y barbero) |
-| lucio | 4444 | barbero (desde octubre 2026) |
-| beni | 3333 | inactivo: figura solo en el histórico de septiembre |
 | juan | 9999 | dueño |
+| ale | 2222 | admin (y barbero) |
+| jere | 1111 | barbero |
+| lucio | 4444 | barbero |
+| beni | 3333 | inactivo: figura solo en el histórico de septiembre |
 
-En septiembre 2026 Beni y Lucio compartían el puesto y la planilla no los separa (columna "BENI / LUCIO"): esas ventas quedan a nombre de Beni (inactivo).
+En septiembre 2026 Beni y Lucio compartían el puesto y la planilla no los separa (columna "BENI / LUCIO"): esas ventas quedan a nombre de Beni (inactivo). **En producción los PIN se generan al azar** (ver deploy).
 
-Cambiar los PIN antes de cualquier deploy.
+### Importar un mes de la planilla
 
-## Estructura
+Dejá el xlsx en `data/planilla.xlsx` (la carpeta `data/` no se versiona) y:
 
-- `prisma/schema.prisma` — modelo (dinero en enteros ARS, fechas `YYYY-MM-DD`, baja lógica, auditoría).
-- `src/domain/` — cálculo puro: tarifas con vigencia, comisión, caja del día, resumen mensual.
-- `src/services/` — operaciones con base de datos: cierre, reapertura, efectivo acumulado, rendición, compensación, alertas.
-- `src/import/` — lectura de la planilla, verificación y carga.
-- `tests/` — Vitest.
+```bash
+npm run import:planilla -- --month 2026-09 --dry-run   # solo verifica y escribe el reporte
+npm run import:planilla -- --month 2026-09             # verifica y carga en la base
+```
+
+El reporte queda en `data/reports/import-AAAA-MM.md`. Importar de nuevo un mes da de baja lógica lo importado antes. El script **informa** las diferencias que encuentra en la planilla (códigos `WARN`/`ERROR`) y no las corrige en silencio: recalcula cada día con las fórmulas de la planilla y exige que coincida, y contrasta los totales del mes contra `TOTALES`.
+Septiembre 2026 está verificado (30 días, 10 de 10 totales coinciden). Soporta las hojas con la estructura de ABR a OCT; **antes de septiembre no hay tarifas cargadas** en el sistema, así que no se pueden importar meses anteriores sin cargarlas primero.
+
+---
 
 ## Deploy en Vercel
 
-SQLite no sirve en Vercel (el disco es efímero), así que producción usa **Postgres (Neon)**. El modelo es el mismo: `scripts/prisma-pg.mjs`
-deriva `prisma/schema.postgres.prisma` del esquema de desarrollo cambiando solo el proveedor. Desarrollo y tests siguen con SQLite.
-Probado de punta a punta contra Postgres 16 (tablas, usuarios, build, login y la prueba en navegador móvil).
+SQLite no sirve en Vercel (el disco es efímero), así que producción usa **Postgres (Neon)**. El modelo es el mismo: `scripts/prisma-pg.mjs` deriva `prisma/schema.postgres.prisma` del esquema de desarrollo cambiando solo el proveedor. Desarrollo y tests siguen con SQLite. Probado de punta a punta contra Postgres 16.
 
-### Pasos
-
-1. **Base de datos:** en Vercel, *Storage → Create → Neon (Postgres)*, región **São Paulo**, y conectala a este proyecto con los entornos
-   **Production y Preview**. La integración crea sola las variables (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`…): **no hay que copiar nada a mano**.
-   El build las reconoce aunque tengan prefijo o se llamen distinto (`src/lib/db-env.ts`).
-2. **Proyecto:** *Add New → Project → importar `Juanje77/CLub95admin`*. En *Settings → Git → Production Branch* poné la rama que tiene la app.
-   El build lo toma de `vercel.json` (`npm run vercel-build`).
-3. **Primer deploy:** el build crea las tablas y, **solo si la base está vacía**, crea los usuarios jere, ale, lucio y juan (el dueño) con **PIN al azar**
-   y los imprime **una sola vez** en el log del build (*Deployments → el deploy → Build Logs*, buscá "Usuarios creados con PIN al azar").
-   **Anotá los PIN y no compartas capturas del log.** En los deploys siguientes no cambia ningún PIN. También fija como fecha de arranque de las alertas el día del primer deploy.
-4. Abrí la URL de Vercel en el celular y "Agregar a la pantalla de inicio".
-
-### Variables de entorno
+1. **Base de datos:** en Vercel, *Storage → Create → Neon (Postgres)*, región **São Paulo**, conectada al proyecto con los entornos **Production y Preview**. La integración crea sola las variables (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`…); el build las reconoce aunque tengan prefijo (`src/lib/db-env.ts`).
+2. **Proyecto:** importar el repositorio. En *Settings → Git → Production Branch* poné la rama con la app. El build sale de `vercel.json` (`npm run vercel-build`).
+3. **Primer deploy:** crea las tablas, los datos base (tarifas, productos, conceptos, cuentas) y, **solo si la base está vacía**, los usuarios con **PIN al azar**, que imprime **una sola vez** en el log del build (*Deployments → el deploy → Build Logs*, "Usuarios creados con PIN al azar"). Anotalos y cambialos enseguida desde *Mi PIN*.
+4. Abrir la URL en el celular y "Agregar a la pantalla de inicio".
 
 | Variable | Obligatoria | Qué es |
 |---|---|---|
 | `DATABASE_URL` (o `POSTGRES_URL`…) | sí | La crea la integración de Neon. |
 | `DATABASE_URL_UNPOOLED` (o `DIRECT_URL`) | recomendada | Conexión sin pooler para crear las tablas. La crea Neon. |
-| `SESSION_SECRET` | no | Clave para firmar la sesión. Si no se define, se **deriva de la conexión a la base** (que ya es un secreto). Definir una propia (`openssl rand -base64 32`) permite rotarla sin tocar la base; al cambiarla se cierran todas las sesiones. |
+| `SESSION_SECRET` | no | Clave para firmar la sesión; si falta se deriva de la conexión a la base. Definir una propia permite rotarla sin tocar la base. |
+
+El seed corre en cada deploy y **es seguro**: solo crea lo que falta, nunca pisa tarifas, comisiones, precios, stock ni PIN que ya existan. `prisma db push` también corre en cada build: si un cambio del esquema fuera destructivo, el build **falla** en vez de borrar datos.
+
+### Copias de seguridad
+
+Los datos están en Neon, que guarda el historial para **restaurar a un momento anterior** (*Neon → Branches → Restore*). Antes de cualquier operación riesgosa conviene crear una rama de la base. Además, el Panel exporta a Excel el resumen del mes y la planilla del mes.
 
 ### Importar septiembre a producción (opcional)
 
@@ -195,10 +187,33 @@ Probado de punta a punta contra Postgres 16 (tablas, usuarios, build, login y la
 DATABASE_URL="<la de producción>" npm run import:planilla -- --month 2026-09
 ```
 
-(con la planilla en `data/planilla.xlsx`; necesita el cliente de Postgres: correr antes `node scripts/prisma-pg.mjs && npx prisma generate --schema prisma/schema.postgres.prisma`, y después `npx prisma generate` para volver al de desarrollo).
+(necesita el cliente de Postgres: antes `node scripts/prisma-pg.mjs && npx prisma generate --schema prisma/schema.postgres.prisma`, y después `npx prisma generate` para volver al de desarrollo).
 
-### Notas
+---
 
-- `prisma db push` corre en cada build: si un cambio del esquema fuera destructivo, el build **falla** en vez de borrar datos. Cuando haya datos reales conviene pasar a migraciones (`prisma migrate`).
-- `npm run seed:prod` sigue disponible para crear los usuarios a mano contra una base, pero ya no hace falta.
-- Los datos de la planilla y `data/` no se suben al repositorio.
+## Seguridad
+
+- Login por usuario y PIN con hash `scrypt`; 5 intentos fallidos bloquean la cuenta 10 minutos; el mensaje y el tiempo de respuesta no revelan si el usuario existe.
+- Sesión en cookie firmada (`HMAC-SHA256`), `httpOnly`, 12 horas.
+- Todos los permisos se validan **en el servidor** (`src/services/*`), no en la pantalla; las exportaciones y los comprobantes exigen sesión de admin/dueño.
+- Auditoría de cada alta, cambio y baja con usuario y hora (`AuditLog`); nunca guarda PIN. Nada se borra de verdad (baja lógica).
+- Los PIN se pueden resetear (el admin resetea barberos; solo el dueño resetea admin/dueño) y el nuevo se muestra una sola vez.
+
+## Estructura del código
+
+- `prisma/schema.prisma` — modelo (dinero en enteros ARS, fechas `YYYY-MM-DD`, baja lógica, auditoría).
+- `src/domain/` — lógica pura y testeada: tarifas con vigencia, comisión, caja del día, grilla, cobertura de retiros, socios, alertas.
+- `src/services/` — operaciones con base de datos y sus reglas de permisos: planilla (grid), cierre, efectivo, compensación, gastos, socios, administración, reportes, exportación, auditoría.
+- `src/import/` — lectura, verificación y carga de la planilla de Excel.
+- `src/app/`, `src/components/` — pantallas (Next.js App Router, mobile-first).
+- `src/lib/offline-queue.ts` — cola de cambios sin señal.
+- `tests/` — Vitest (más de 200 casos) y `tests/e2e/run.mjs` (navegador móvil).
+
+## Límites conocidos
+
+- **Carga sin señal:** cubre la planilla y la asistencia de socios (los cambios son valores absolutos). La app necesita haberse abierto con conexión: sin señal no se puede iniciar sesión ni abrir pantallas nuevas.
+- **Meses anteriores a septiembre 2026** no se pueden importar (no hay tarifas cargadas para esas fechas).
+- **Un cierre por día para todo el local** (no por barbero), igual que la planilla.
+- El **PDF** se genera con "Imprimir / guardar PDF" del navegador (hay estilos de impresión), no con un generador propio.
+- Las **alertas** se muestran dentro de la app; no se envían notificaciones push ni mensajes.
+- `prisma db push` en el build es cómodo mientras no haya datos reales delicados; más adelante conviene pasar a migraciones (`prisma migrate`).

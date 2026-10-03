@@ -231,6 +231,17 @@ const xl2 = await page.request.get(BASE + "/api/export?tipo=planilla&mes=" + TOD
 check(xl2.status() === 200, "la planilla del mes también se exporta a Excel");
 await shot("panel");
 
+// 9c. Auditoría: quién hizo qué
+await page.getByRole("link", { name: "Más" }).click();
+await page.getByRole("link", { name: /^Auditoría/ }).click();
+await page.getByRole("heading", { name: "Auditoría" }).waitFor();
+await page.getByLabel("Qué").selectOption({ label: "Gasto" });
+await page.getByRole("button", { name: "Filtrar" }).click();
+await page.getByText(/Ale · Creó/).first().waitFor();
+const auditText = await page.locator("ul.list").innerText();
+check(auditText.includes("Gasto") && auditText.includes("Borró"), "la auditoría muestra quién creó y quién borró cada gasto");
+check(!/scrypt|pinHash/i.test(await page.locator("body").innerText()), "la auditoría nunca muestra PIN ni hashes");
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más" }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();
