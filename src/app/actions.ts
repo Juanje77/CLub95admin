@@ -7,8 +7,8 @@ import { db } from "../lib/db";
 import { todayBA } from "../domain/money";
 import type { ServiceType } from "../domain/types";
 import { loginWithPin, type SessionUser } from "../services/auth";
-import { addProductSale, addMembershipVisit, addServiceSale, undoLastSale } from "../services/sales";
-import { addWithdrawal, closeDay, markClosedDay, reopenDay, rendir } from "../services/closing";
+import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
+import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError } from "../services/common";
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
@@ -45,44 +45,41 @@ export async function logout() {
   redirect("/login");
 }
 
-export async function addService(p: { date: string; userId: string; serviceType: ServiceType; paymentMethod: string }) {
+// --- Planilla: se carga la cantidad de cada cosa por día ---------------------------------------------------------------
+
+export async function saveServiceCount(p: { date: string; userId: string; serviceType: ServiceType; count: number }) {
   return run(async (actor) => {
-    await addServiceSale(db, { actor, ...p });
+    await setServiceCount(db, { actor, ...p });
   });
 }
 
-export async function addMembership(p: { date: string; userId: string }) {
+export async function saveMembershipCount(p: { date: string; userId: string; count: number }) {
   return run(async (actor) => {
-    await addMembershipVisit(db, { actor, ...p });
+    await setMembershipCount(db, { actor, ...p });
   });
 }
 
-export async function addProduct(p: { date: string; userId: string; productId: string; quantity: number; paymentMethod: string }) {
+export async function saveProductCount(p: { date: string; productId: string; count: number }) {
   return run(async (actor) => {
-    await addProductSale(db, { actor, ...p });
+    await setProductCount(db, { actor, ...p });
   });
 }
 
-export async function undoLast(p: { date: string; userId?: string }) {
+export async function saveDeclared(p: { date: string; account: string; amount: number }) {
   return run(async (actor) => {
-    await undoLastSale(db, { actor, ...p });
-    return "Se deshizo la última venta.";
+    await setDeclared(db, { actor, ...p });
   });
 }
 
-export async function closeCaja(p: { date: string; cash: number; accounts: Record<string, number>; changeLeft: number; note: string }) {
+export async function saveChange(p: { date: string; amount: number }) {
   return run(async (actor) => {
-    const lines = Object.entries(p.accounts).filter(([, v]) => int(v) !== 0).map(([account, amount]) => ({ account, amount: int(amount) }));
-    const transfers = lines.reduce((a, l) => a + l.amount, 0);
-    await closeDay(db, {
-      date: p.date,
-      actor,
-      declaredCash: int(p.cash),
-      declaredTransfers: transfers,
-      changeLeft: int(p.changeLeft),
-      note: p.note,
-      lines: [...lines, ...(int(p.cash) ? [{ account: "EFECTIVO", amount: int(p.cash) }] : [])],
-    });
+    await setChangeLeft(db, { actor, ...p });
+  });
+}
+
+export async function closeDayAction(p: { date: string; note: string }) {
+  return run(async (actor) => {
+    await closeDayFromGrid(db, { actor, ...p });
     return "Caja cerrada.";
   });
 }

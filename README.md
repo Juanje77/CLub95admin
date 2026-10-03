@@ -1,7 +1,7 @@
 # Club 95 — sistema de gestión
 
 Reemplaza la planilla `CLUB95_GESTION_ALE.xlsx`: caja diaria, gastos, membresías y panel del dueño.
-Estado: **etapa 1** (modelo, motor de cálculo, importación de septiembre 2026, reglas de cierre/efectivo/compensación/alertas) y **etapa 2: Caja diaria** (app web móvil). Gastos, Membresías y Panel del dueño vienen en las etapas siguientes.
+Estado: **etapa 1** (modelo, motor de cálculo, importación de septiembre 2026, reglas de cierre/efectivo/compensación/alertas) y **etapa 2: Caja diaria** (app web móvil, con la misma forma de trabajo que la planilla). Gastos, Membresías y Panel del dueño vienen en las etapas siguientes.
 
 ## Cómo correrlo
 
@@ -26,7 +26,7 @@ SESSION_SECRET=algo-largo-1234 DATABASE_URL=file:/tmp/e2e.db npx next start -p 3
 BASE_URL=http://localhost:3100 CHROME=/ruta/a/chrome SHOTS=/tmp/shots npm run e2e
 ```
 
-Recorre: login (y PIN incorrecto), carga de servicios, deshacer, bebidas, socio, cierre con y sin diferencia, caja cerrada bloqueada, cobertura de retiros, efectivo acumulado, reapertura y alertas, y deja capturas.
+Recorre: login (y sin sesión), la planilla del mes, carga de cantidades (servicios, socios, bebida y cera), el control del día (ingresos, mano de obra, dinero que debe haber, ganancia), permisos por barbero y por día, dinero ingresado con diferencia y nota obligatoria, cierre del día, efectivo acumulado, carga de un día pasado por el admin, reapertura con motivo y navegación entre meses; deja capturas.
 
 ### Importar un mes de la planilla
 
@@ -54,11 +54,26 @@ Las reglas de arranque están en `src/import/rules.ts`.
 
 ## Pantallas (etapa 2)
 
+La pantalla principal es **la planilla del mes**: los **días en columnas** y, en filas, lo mismo que la hoja de Excel. **Solo se cargan números** (cantidades); todo lo demás se calcula.
+
+| Bloque de la grilla | Qué se carga | Qué se calcula |
+|---|---|---|
+| Un bloque por barbero (Jere, Ale, Lucio) | Cantidad de **cortes**, **corte y barba**, **barba y cejas** y **socios (membresía)** del día | Generado y mano de obra de ese barbero |
+| Bebidas (sin corte) | Cantidad vendida de cada bebida | |
+| Ceras, polvo y aceite | Cantidad vendida de cada producto (descuenta stock) | |
+| **Control del día** | | Ingresos por servicios, bebidas/ceras, **total ingresos**, mano de obra, **dinero que debe haber**, costos y **GANANCIA DEL DÍA** |
+| Dinero ingresado | Efectivo, Brubank, Brubank Juan, Mercado Pago, cambio dejado | Total ingresado y **diferencia de caja** (✓ si cuadra) |
+
+- Escribís la cantidad, tocás afuera (o Enter) y se guarda. Una columna "Mes" suma todo, y arriba están los totales del mes (ingresos, mano de obra, ganancia).
+- Tocás el número del día y abajo aparece su resumen con el botón **Cerrar el día** (con nota obligatoria si hay diferencia). Un día cerrado queda bloqueado; el admin lo reabre con motivo.
+- **Ganancia del día** (como la hoja): parte del local en los servicios (precio − bebida − mano de obra) + margen de la bebida incluida + margen de las bebidas sueltas + margen de ceras/polvo/aceite. Las membresías se liquidan aparte (compensación de fin de mes).
+- Cada barbero carga **lo suyo y solo el día de hoy**; ve todo el mes. El admin/dueño carga cualquier barbero y cualquier día pasado.
+- Ale y el dueño ven además el efectivo acumulado y las rendiciones.
+
 | Pantalla | Quién | Qué hace |
 |---|---|---|
 | Login | todos | Usuario + PIN. 5 intentos fallidos bloquean la cuenta 10 minutos. Sesión de 12 horas en cookie firmada. |
-| Hoy | barbero / admin | Botones grandes por servicio con el precio vigente; medio de pago (transferencia por defecto, efectivo, MP); visita de socio; venta de bebidas/productos con stock; deshacer la última; resumen y ventas del día. El admin puede mirar y cargar otro día y elegir el barbero. |
-| Cierre | barbero / admin | Muestra lo que tiene que haber, calcula la diferencia en vivo, exige nota si no cuadra y bloquea el día al cerrar. El admin reabre con motivo. |
+| Planilla | barbero / admin | La grilla descripta arriba. |
 | Efectivo | barbero / admin | El barbero ve cuánto puede retirar hoy en efectivo. El admin ve la fila acumulada, registra rendiciones y retiros. |
 | Alertas | barbero / admin | Las alertas que le corresponden por rol; el admin puede marcar un día como "no abrimos". |
 
@@ -82,7 +97,7 @@ El saldo es lo que tiene que estar en la caja cuando pasás el fin de semana; al
 ### Retiros de barberos: el banco primero
 
 Los pagos son casi todos por transferencia y los barberos cobran de lo recaudado en el banco. **Solo si el banco no cubrió lo que les corresponde cobrar ese día pueden completar con efectivo** de la caja
-(`src/domain/coverage.ts`): por barbero, efectivo permitido = mano de obra del día − transferencias recaudadas en sus ventas.
+(`src/domain/coverage.ts`): el faltante del día es **mano de obra total − transferencias ingresadas** (las cuentas bancarias de la grilla) y se reparte entre los barberos en proporción a lo que les corresponde. Mientras el dinero del día no esté cargado no se sabe qué cubrió el banco y no se marca ningún retiro como excepción.
 Un retiro en efectivo por encima de ese faltante es una excepción: el sistema exige un motivo y deja la alerta `RETIRO_EFECTIVO_EXCEDE` para admin y dueño.
 
 ### Compensación de fin de mes

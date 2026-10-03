@@ -11,11 +11,11 @@ export async function loadAlerts(user: SessionUser) {
   return alertsFor(all, user.role);
 }
 
-export default async function Shell({ user, children, alertCount }: { user: SessionUser; children: React.ReactNode; alertCount?: number }) {
+export default async function Shell({ user, children, alertCount, wide }: { user: SessionUser; children: React.ReactNode; alertCount?: number; wide?: boolean }) {
   const count = alertCount ?? (await loadAlerts(user)).length;
   return (
     <>
-      <main>
+      <main className={wide ? "wide" : undefined}>
         <header className="top">
           <div>
             <div className="brand">
