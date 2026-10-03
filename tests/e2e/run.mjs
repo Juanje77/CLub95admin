@@ -62,6 +62,20 @@ await calcIs("c-ganancia", "40.517");   // parte del local + margen bebida + mar
 check((await cell("Lucio|CORTE").inputValue()) === "3", "la cantidad queda guardada en la celda");
 await shot("planilla-con-cantidades");
 
+// 3b. Sin señal: el cambio queda en el celular (marcado como pendiente) y se manda solo al volver la conexión
+await ctx.setOffline(true);
+await cell("Lucio|BARBA_CEJAS").fill("2");
+await cell("Lucio|BARBA_CEJAS").press("Enter");
+await page.getByText("1 cambio sin enviar").waitFor();
+check((await cell("Lucio|BARBA_CEJAS").inputValue()) === "2" && ((await cell("Lucio|BARBA_CEJAS").getAttribute("class")) ?? "").includes("pending"), "sin señal: el número queda en la celda marcado como pendiente");
+await shot("sin-senal");
+await ctx.setOffline(false);
+await page.locator("[data-offline-banner]").waitFor({ state: "detached", timeout: 20000 });
+await page.waitForFunction(([k, d, e]) => document.querySelector(`td[data-calc="${k}|${d}"]`)?.textContent?.trim() === e, ["c-ing", TODAY, "138.700"], { timeout: 15000 });
+check(true, "al volver la señal el cambio se envía solo (ingresos 108.700 → 138.700)");
+await type("Lucio|BARBA_CEJAS", 0);
+await calcIs("c-ing", "108.700");
+
 // 4. Cada uno carga lo suyo, y solo hoy
 check((await page.locator('input[data-cell^="Jere|"]').count()) === 0, "un barbero no puede editar las filas de otro");
 check((await page.locator(`input[data-cell$="|${YESTERDAY}"]`).count()) === 0, "un barbero no puede editar días pasados");

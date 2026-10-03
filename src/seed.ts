@@ -69,7 +69,7 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
     for (const r of SYSTEM_RULES[u.key]) {
       await db.barberRule.upsert({
         where: { userId_validFrom: { userId: user.id, validFrom: r.validFrom } },
-        update: { commissionBp: r.commissionBp, drinkDeduction: r.drinkDeduction, drinkCost: r.drinkCost },
+        update: {}, // no pisar lo que el dueño haya corregido: el seed corre en cada deploy
         create: { userId: user.id, ...r },
       });
     }
@@ -109,7 +109,7 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
   for (const t of SYSTEM_TARIFFS) {
     await db.tariff.upsert({
       where: { serviceType_validFrom: { serviceType: t.serviceType, validFrom: t.validFrom } },
-      update: { price: t.price },
+      update: {}, // idem: solo crea lo que falta
       create: t,
     });
   }
@@ -117,7 +117,7 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
     const prod = await db.product.upsert({ where: { name: c.name }, update: {}, create: { name: c.name, kind: c.kind } });
     await db.productPrice.upsert({
       where: { productId_validFrom: { productId: prod.id, validFrom: SYSTEM_FROM } },
-      update: { price: c.price, cost: c.cost },
+      update: {}, // idem
       create: { productId: prod.id, validFrom: SYSTEM_FROM, price: c.price, cost: c.cost },
     });
   }

@@ -168,3 +168,7 @@ table.mini th:first-child, table.mini td:first-child { text-align: left; }
   details > summary { display: none; }
   details[open] > *, details > * { display: block; }
 }
+
+/* Cambios sin enviar (sin señal): se ven distintos hasta que el servidor los confirma */
+input.cell.pending { outline: 2px dashed var(--warn); outline-offset: -2px; background: var(--warn-bg); }
+button.att.pending { outline: 2px dashed var(--warn); outline-offset: -2px; }

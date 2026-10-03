@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { saveChange, saveDeclared, saveMembershipCount, saveProductCount, saveServiceCount } from "../app/actions";
 import { formatARS } from "../domain/money";
 import { SERVICE_LABEL, SERVICE_TYPES } from "../domain/types";
 import type { GridDayCol, MonthGrid } from "../services/grid";
 import DayPanel from "./DayPanel";
-import { useAction } from "./useAction";
+import type { QueueItem } from "../lib/offline-queue";
+import { useOfflineSave } from "./useOfflineSave";
 
 const WD = ["D", "L", "M", "M", "J", "V", "S"];
 const wd = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
@@ -20,16 +20,16 @@ interface Viewer {
 
 type RowDef =
   | { kind: "section"; key: string; label: string; hint?: string }
-  | { kind: "input"; key: string; testId: string; label: string; get: (d: GridDayCol) => number; editable: (d: GridDayCol) => boolean; save: (d: GridDayCol, n: number) => ReturnType<typeof saveChange>; money?: boolean }
+  | { kind: "input"; key: string; testId: string; label: string; get: (d: GridDayCol) => number; editable: (d: GridDayCol) => boolean; item: (d: GridDayCol, n: number) => Omit<QueueItem, "at">; money?: boolean }
   | { kind: "calc"; key: string; label: string; get: (d: GridDayCol) => number | null; tone?: "strong" | "profit" | "diff"; sum?: boolean };
 
-function NumberCell({ value, editable, onSave, money, cell }: { value: number; editable: boolean; onSave: (n: number) => void; money?: boolean; cell: string }) {
+function NumberCell({ value, editable, onSave, money, cell, pending }: { value: number; editable: boolean; onSave: (n: number) => void; money?: boolean; cell: string; pending?: boolean }) {
   const [text, setText] = useState(value ? String(value) : "");
   useEffect(() => setText(value ? String(value) : ""), [value]);
   if (!editable) return <span className="cellro">{fmt(value)}</span>;
   return (
     <input
-      className={`cell ${money ? "money" : ""}`}
+      className={`cell ${money ? "money" : ""} ${pending ? "pending" : ""}`}
       inputMode="numeric"
       size={1}
       data-cell={cell}
@@ -49,7 +49,7 @@ function NumberCell({ value, editable, onSave, money, cell }: { value: number; e
 }
 
 export default function PlanillaGrid({ grid, viewer, prevMonth, nextMonth, monthLabel }: { grid: MonthGrid; viewer: Viewer; prevMonth: string; nextMonth: string; monthLabel: string }) {
-  const { pending, run, toast } = useAction();
+  const offline = useOfflineSave();
   const [selected, setSelected] = useState<string>(() => (grid.days.some((d) => d.date === grid.today) ? grid.today : (grid.days[0]?.date ?? grid.today)));
   const todayRef = useRef<HTMLTableCellElement | null>(null);
 
@@ -73,17 +73,17 @@ export default function PlanillaGrid({ grid, viewer, prevMonth, nextMonth, month
           label: SERVICE_LABEL[t],
           get: (d) => d.services[b.id]?.[t] ?? 0,
           editable: mine,
-          save: (d, n) => saveServiceCount({ date: d.date, userId: b.id, serviceType: t, count: n }),
+          item: (d, n) => ({ key: `cell:${b.id}-${t}:${d.date}`, action: "saveServiceCount", payload: { date: d.date, userId: b.id, serviceType: t, count: n }, value: n }),
         });
       }
-      out.push({ kind: "input", key: `${b.id}-socio`, testId: `${b.name}|SOCIO`, label: "Socios (membresía)", get: (d) => d.memberships[b.id] ?? 0, editable: mine, save: (d, n) => saveMembershipCount({ date: d.date, userId: b.id, count: n }) });
+      out.push({ kind: "input", key: `${b.id}-socio`, testId: `${b.name}|SOCIO`, label: "Socios (membresía)", get: (d) => d.memberships[b.id] ?? 0, editable: mine, item: (d, n) => ({ key: `cell:${b.id}-socio:${d.date}`, action: "saveMembershipCount", payload: { date: d.date, userId: b.id, count: n }, value: n }) });
       out.push({ kind: "calc", key: `${b.id}-gen`, label: "Generado", get: (d) => d.result.barbers.find((x) => x.userId === b.id)?.gross ?? 0, sum: true });
       out.push({ kind: "calc", key: `${b.id}-mo`, label: "Mano de obra", get: (d) => d.result.barbers.find((x) => x.userId === b.id)?.labor ?? 0, sum: true });
     }
     const drinks = grid.products.filter((p) => p.kind === "BEBIDA");
     const others = grid.products.filter((p) => p.kind !== "BEBIDA");
     const prodRow = (p: MonthGrid["products"][number]): RowDef => ({
-      kind: "input", key: `p-${p.id}`, testId: `P|${p.name}`, label: p.name, get: (d) => d.products[p.id] ?? 0, editable: dayEditable, save: (d, n) => saveProductCount({ date: d.date, productId: p.id, count: n }),
+      kind: "input", key: `p-${p.id}`, testId: `P|${p.name}`, label: p.name, get: (d) => d.products[p.id] ?? 0, editable: dayEditable, item: (d, n) => ({ key: `cell:p-${p.id}:${d.date}`, action: "saveProductCount", payload: { date: d.date, productId: p.id, count: n }, value: n }),
     });
     if (drinks.length) out.push({ kind: "section", key: "s-bebidas", label: "Bebidas (sin corte)", hint: "cantidad vendida" }, ...drinks.map(prodRow));
     if (others.length) out.push({ kind: "section", key: "s-prod", label: "Ceras, polvo y aceite", hint: "cantidad vendida" }, ...others.map(prodRow));
@@ -99,10 +99,10 @@ export default function PlanillaGrid({ grid, viewer, prevMonth, nextMonth, month
 
     out.push({ kind: "section", key: "s-caja", label: "Dinero ingresado", hint: "en pesos" });
     for (const a of grid.accounts) {
-      out.push({ kind: "input", key: `a-${a.key}`, testId: `A|${a.name}`, label: a.name, money: true, get: (d) => d.declared[a.key] ?? 0, editable: dayEditable, save: (d, n) => saveDeclared({ date: d.date, account: a.key, amount: n }) });
+      out.push({ kind: "input", key: `a-${a.key}`, testId: `A|${a.name}`, label: a.name, money: true, get: (d) => d.declared[a.key] ?? 0, editable: dayEditable, item: (d, n) => ({ key: `cell:a-${a.key}:${d.date}`, action: "saveDeclared", payload: { date: d.date, account: a.key, amount: n }, value: n }) });
     }
     out.push({ kind: "calc", key: "a-total", label: "Total ingresado", get: (d) => d.totalDeclared, sum: true });
-    out.push({ kind: "input", key: "a-cambio", testId: "A|CAMBIO", label: "Cambio dejado", money: true, get: (d) => d.changeLeft, editable: dayEditable, save: (d, n) => saveChange({ date: d.date, amount: n }) });
+    out.push({ kind: "input", key: "a-cambio", testId: "A|CAMBIO", label: "Cambio dejado", money: true, get: (d) => d.changeLeft, editable: dayEditable, item: (d, n) => ({ key: `cell:a-cambio:${d.date}`, action: "saveChange", payload: { date: d.date, amount: n }, value: n }) });
     out.push({ kind: "calc", key: "a-dif", label: "Diferencia de caja", get: (d) => d.difference, tone: "diff", sum: true });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,9 +134,10 @@ export default function PlanillaGrid({ grid, viewer, prevMonth, nextMonth, month
         <div className="card"><div className="muted">Mano de obra</div><div className="num big2">{formatARS(totals.labor)}</div></div>
         <div className="card"><div className="muted">Ganancia del mes</div><div className="num big2 okc">{formatARS(totals.profit)}</div></div>
       </div>
+      {offline.banner}
       {totals.gaps > 0 && <div className="alert WARN">Hay {totals.gaps} día{totals.gaps === 1 ? "" : "s"} con diferencia de caja este mes.</div>}
       <p className="muted" style={{ margin: "6px 0" }}>
-        Escribí la <b>cantidad</b> y tocá afuera (o Enter) para guardar. Tocá el número del día para cerrarlo.{pending ? " Guardando…" : ""}
+        Escribí la <b>cantidad</b> y tocá afuera (o Enter) para guardar. Tocá el número del día para cerrarlo.{offline.saving > 0 ? " Guardando…" : ""}
       </p>
 
       <div className="gridwrap" role="region" aria-label="Planilla del mes" tabIndex={0}>
@@ -175,9 +176,10 @@ export default function PlanillaGrid({ grid, viewer, prevMonth, nextMonth, month
                 if (v !== null) sum += v;
                 const cls = `${d.date === grid.today ? "today" : ""} ${d.date === selected ? "sel" : ""} ${d.closed ? "closed" : ""}`;
                 if (r.kind === "input") {
+                  const queued = offline.pendingValue(r.item(d, 0).key);
                   return (
                     <td key={d.date} className={cls}>
-                      <NumberCell cell={`${r.testId}|${d.date}`} value={v ?? 0} editable={r.editable(d)} money={r.money} onSave={(n) => run(() => r.save(d, n))} />
+                      <NumberCell cell={`${r.testId}|${d.date}`} value={queued ?? v ?? 0} pending={queued !== undefined} editable={r.editable(d)} money={r.money} onSave={(n) => void offline.save(r.item(d, n))} />
                     </td>
                   );
                 }
@@ -202,7 +204,6 @@ export default function PlanillaGrid({ grid, viewer, prevMonth, nextMonth, month
       </div>
 
       {selectedDay && <DayPanel day={selectedDay} grid={grid} viewer={viewer} barberName={barberName} />}
-      {toast}
     </>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { editMember, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, toggleAttendance, voidMemberEntry } from "../app/actions";
+import { editMember, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import type { MemberRow, MembersMonth } from "../services/members";
 import { useAction } from "./useAction";
+import { useOfflineSave } from "./useOfflineSave";
 
 const WD = ["D", "L", "M", "M", "J", "V", "S"];
 const wd = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
@@ -27,23 +28,19 @@ interface Props {
   diffs: PlanillaDiff[];
 }
 
-function AttendanceCell({ m, date, editable, on }: { m: MemberRow; date: string; editable: boolean; on: boolean }) {
-  const { run, toast } = useAction();
+function AttendanceCell({ m, date, editable, on, pending, onToggle }: { m: MemberRow; date: string; editable: boolean; on: boolean; pending: boolean; onToggle: () => void }) {
   return (
-    <>
-      <button
-        type="button"
-        className={`att ${on ? "on" : ""}`}
-        data-att={`${m.name}|${date}`}
-        disabled={!editable}
-        aria-pressed={on}
-        aria-label={`Asistencia de ${m.name} el ${Number(date.slice(8))}`}
-        onClick={() => run(() => toggleAttendance({ memberId: m.id, date, present: !on }))}
-      >
-        {on ? "✓" : ""}
-      </button>
-      {toast}
-    </>
+    <button
+      type="button"
+      className={`att ${on ? "on" : ""} ${pending ? "pending" : ""}`}
+      data-att={`${m.name}|${date}`}
+      disabled={!editable}
+      aria-pressed={on}
+      aria-label={`Asistencia de ${m.name} el ${Number(date.slice(8))}`}
+      onClick={onToggle}
+    >
+      {on ? "✓" : ""}
+    </button>
   );
 }
 
@@ -157,6 +154,7 @@ function NewMemberForm({ barbers }: { barbers: { id: string; name: string }[] })
 }
 
 export default function SociosGrid({ data, days, today, prevMonth, nextMonth, isAdmin, barbers, selectedId, ledger, diffs }: Props) {
+  const offline = useOfflineSave();
   const todayRef = useRef<HTMLTableCellElement | null>(null);
   useEffect(() => { todayRef.current?.scrollIntoView({ inline: "center", block: "nearest" }); }, [data.month]);
   const groups = [...new Set(data.members.map((m) => m.barberName))];
@@ -209,7 +207,21 @@ export default function SociosGrid({ data, days, today, prevMonth, nextMonth, is
                     </th>
                     {days.map((d) => (
                       <td key={d} className={d === today ? "today" : ""} style={{ padding: 0, textAlign: "center" }}>
-                        <AttendanceCell m={m} date={d} on={m.attended.includes(d)} editable={m.active && d <= today && (isAdmin || d === today)} />
+                        {(() => {
+                          const key = `att:${m.id}:${d}`;
+                          const queued = offline.pendingValue(key);
+                          const on = queued !== undefined ? queued === 1 : m.attended.includes(d);
+                          return (
+                            <AttendanceCell
+                              m={m}
+                              date={d}
+                              on={on}
+                              pending={queued !== undefined}
+                              editable={m.active && d <= today && (isAdmin || d === today)}
+                              onToggle={() => void offline.save({ key, action: "toggleAttendance", payload: { memberId: m.id, date: d, present: !on }, value: on ? 0 : 1 })}
+                            />
+                          );
+                        })()}
                       </td>
                     ))}
                     <td className="total">{m.visits || ""}</td>
@@ -238,6 +250,7 @@ export default function SociosGrid({ data, days, today, prevMonth, nextMonth, is
         </details>
       )}
 
+      {offline.banner}
       {isAdmin && selected && <MemberPanel key={selected.id} m={selected} ledger={ledger} barbers={barbers} today={today} />}
       {isAdmin && <NewMemberForm barbers={barbers} />}
     </>
