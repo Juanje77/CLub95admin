@@ -172,3 +172,10 @@ table.mini th:first-child, table.mini td:first-child { text-align: left; }
 /* Cambios sin enviar (sin señal): se ven distintos hasta que el servidor los confirma */
 input.cell.pending { outline: 2px dashed var(--warn); outline-offset: -2px; background: var(--warn-bg); }
 button.att.pending { outline: 2px dashed var(--warn); outline-offset: -2px; }
+
+/* Carga rápida de gastos */
+.quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.pill { min-height: 44px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font-weight: 600; }
+.pill.on { background: var(--gold); color: #111; border-color: transparent; }
+.bigmoney { font-size: 1.6rem; font-weight: 700; }
+.more { margin-top: 10px; }

@@ -6,6 +6,7 @@ import { editExpense, removeExpense, removeExtraIncome, removeRecurring, saveCon
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import { compressToJpeg } from "../lib/image";
 import type { Category, ExpenseListRow, ExpenseSummary, RecurringRow } from "../services/expenses";
+import { HBars } from "./Charts";
 import { useAction } from "./useAction";
 
 const num = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
@@ -26,6 +27,9 @@ interface Props {
   summary: ExpenseSummary;
   recurring: RecurringRow[];
   extra: ExtraView[];
+  /** Conceptos más usados (ids), para los botones de carga rápida. */
+  topConcepts: string[];
+  prevTotal: number;
 }
 
 function ConceptSelect({ concepts, value, onChange }: { concepts: ConceptView[]; value: string; onChange: (v: string) => void }) {
@@ -41,7 +45,7 @@ function ConceptSelect({ concepts, value, onChange }: { concepts: ConceptView[];
   );
 }
 
-function NewExpenseForm({ concepts, today, preset }: { concepts: ConceptView[]; today: string; preset: { conceptId: string; amount: string; n: number } }) {
+function NewExpenseForm({ concepts, topConcepts, today, preset }: { concepts: ConceptView[]; topConcepts: string[]; today: string; preset: { conceptId: string; amount: string; n: number } }) {
   const [date, setDate] = useState(today);
   const [conceptId, setConceptId] = useState(preset.conceptId);
   const [amount, setAmount] = useState(preset.amount);
@@ -56,42 +60,57 @@ function NewExpenseForm({ concepts, today, preset }: { concepts: ConceptView[]; 
     setConceptId(preset.conceptId);
     setAmount(preset.amount);
   }
+  const quick = topConcepts.map((id) => concepts.find((c) => c.id === id && c.active)).filter((c): c is ConceptView => !!c);
+  const selected = concepts.find((c) => c.id === conceptId);
   return (
     <form
       id="nuevo-gasto"
       className="card"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => saveExpense({ date, conceptId, amount: num(amount), description, receiptData: photo }), () => { setAmount(""); setDescription(""); setPhoto(null); if (fileRef.current) fileRef.current.value = ""; });
+        run(() => saveExpense({ date, conceptId, amount: num(amount), description, receiptData: photo }), () => { setConceptId(""); setAmount(""); setDescription(""); setPhoto(null); setDate(today); if (fileRef.current) fileRef.current.value = ""; });
       }}
     >
-      <label className="field"><span>Fecha</span><input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
-      <label className="field"><span>Concepto</span><ConceptSelect concepts={concepts} value={conceptId} onChange={setConceptId} /></label>
-      <label className="field"><span>Monto ($)</span><input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></label>
-      <label className="field"><span>Descripción (opcional)</span><input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-      <label className="field">
-        <span>Foto del comprobante (opcional)</span>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={async (e) => {
-            const f = e.target.files?.[0];
-            setPhotoError(null);
-            if (!f) return setPhoto(null);
-            try {
-              setPhoto(await compressToJpeg(f));
-            } catch (err) {
-              setPhoto(null);
-              setPhotoError(err instanceof Error ? err.message : "No se pudo procesar la foto.");
-            }
-          }}
-        />
-      </label>
-      {photo && <img src={photo} alt="Vista previa del comprobante" style={{ maxWidth: "100%", maxHeight: 160, borderRadius: 8, marginBottom: 8 }} />}
-      {photoError && <div className="alert ERROR">{photoError}</div>}
-      <button className="big gold" type="submit" disabled={pending || !conceptId || num(amount) <= 0}>Guardar gasto</button>
+      <div className="field"><span>1. ¿En qué fue?</span></div>
+      {quick.length > 0 && (
+        <div className="quick" role="group" aria-label="Conceptos frecuentes">
+          {quick.map((c) => (
+            <button key={c.id} type="button" className={`pill ${c.id === conceptId ? "on" : ""}`} aria-pressed={c.id === conceptId} onClick={() => setConceptId(c.id)}>{c.name}</button>
+          ))}
+        </div>
+      )}
+      <label className="field"><span>{quick.length > 0 ? "Otro concepto" : "Concepto"}</span><ConceptSelect concepts={concepts} value={quick.some((c) => c.id === conceptId) ? "" : conceptId} onChange={setConceptId} /></label>
+      <label className="field"><span>2. Monto ($)</span><input inputMode="numeric" className="bigmoney" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></label>
+      <button className="big gold" type="submit" disabled={pending || !conceptId || num(amount) <= 0}>
+        {selected && num(amount) > 0 ? `Guardar ${selected.name} · ${formatARS(num(amount))}` : "Guardar gasto"}
+      </button>
+      <details className="more">
+        <summary className="muted">Más datos: fecha, nota o foto del comprobante</summary>
+        <label className="field"><span>Fecha (hoy por defecto)</span><input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
+        <label className="field"><span>Descripción (opcional)</span><input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        <label className="field">
+          <span>Foto del comprobante (opcional)</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              setPhotoError(null);
+              if (!f) return setPhoto(null);
+              try {
+                setPhoto(await compressToJpeg(f));
+              } catch (err) {
+                setPhoto(null);
+                setPhotoError(err instanceof Error ? err.message : "No se pudo procesar la foto.");
+              }
+            }}
+          />
+        </label>
+        {photo && <img src={photo} alt="Vista previa del comprobante" style={{ maxWidth: "100%", maxHeight: 160, borderRadius: 8, marginBottom: 8 }} />}
+        {photoError && <div className="alert ERROR">{photoError}</div>}
+      </details>
       {toast}
     </form>
   );
@@ -155,25 +174,8 @@ export default function GastosClient(p: Props) {
         <Link className="btn" href={`/gastos?mes=${p.nextMonth}`} aria-label="Mes siguiente">→</Link>
       </div>
 
-      <div className="card">
-        <div className="muted">Total del mes</div>
-        <div className="diff" style={{ fontSize: "1.8rem" }}>{formatARS(p.summary.total)}</div>
-        <ul className="list">
-          {CAT_ORDER.map((c) => (
-            <li key={c}><span>{CAT_LABEL[c]}</span><span className="num">{formatARS(p.summary.byCategory[c])}</span></li>
-          ))}
-        </ul>
-        {p.summary.byConcept.length > 0 && (
-          <details>
-            <summary className="muted">Por concepto</summary>
-            <ul className="list">
-              {p.summary.byConcept.map((c) => (
-                <li key={c.concept}><span>{c.concept} <span className="muted">· {c.count}</span></span><span className="num">{formatARS(c.total)}</span></li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
+      <h2>Cargar un gasto</h2>
+      <NewExpenseForm concepts={p.concepts} topConcepts={p.topConcepts} today={p.today} preset={preset} />
 
       {p.recurring.length > 0 && (
         <>
@@ -195,8 +197,25 @@ export default function GastosClient(p: Props) {
         </>
       )}
 
-      <h2>Nuevo gasto</h2>
-      <NewExpenseForm concepts={p.concepts} today={p.today} preset={preset} />
+      <h2>Resumen del mes</h2>
+      <div className="card">
+        <div className="muted">Total del mes</div>
+        <div className="diff" style={{ fontSize: "1.8rem" }}>{formatARS(p.summary.total)}</div>
+        <div className="muted">
+          {p.prevTotal > 0
+            ? `${p.summary.total >= p.prevTotal ? "+" : "−"}${formatARS(Math.abs(p.summary.total - p.prevTotal))} contra ${monthLabel(p.prevMonth)} (${formatARS(p.prevTotal)})`
+            : `Sin gastos cargados en ${monthLabel(p.prevMonth)}`}
+        </div>
+        <h3 style={{ margin: "12px 0 6px" }}>Por categoría</h3>
+        <HBars ariaLabel="Gastos del mes por categoría" items={CAT_ORDER.map((c) => ({ label: CAT_LABEL[c], value: p.summary.byCategory[c] }))} />
+        {p.summary.byConcept.length > 0 && (
+          <>
+            <h3 style={{ margin: "12px 0 6px" }}>Por concepto</h3>
+            <HBars ariaLabel="Gastos del mes por concepto" items={p.summary.byConcept.map((c) => ({ label: c.concept, value: c.total, hint: `${c.count} carga${c.count === 1 ? "" : "s"}` }))} />
+          </>
+        )}
+        <p className="muted" style={{ margin: "10px 0 0" }}>Estos gastos ya se descuentan en el resultado del <Link href={`/panel?mes=${p.month}`}>panel del dueño</Link> (la reposición de mercadería se muestra aparte).</p>
+      </div>
 
       <h2>Gastos cargados</h2>
       <label className="field">

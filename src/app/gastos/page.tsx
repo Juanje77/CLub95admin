@@ -12,12 +12,18 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const today = todayBA();
   const month = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : today.slice(0, 7);
-  const [{ rows, summary }, concepts, recurring, extra] = await Promise.all([
+  const since = shiftMonth(month, -2) + "-01";
+  const [{ rows, summary }, prev, recent, concepts, recurring, extra] = await Promise.all([
     listExpenses(db, { month, conceptId: sp.concepto || undefined }),
+    listExpenses(db, { month: shiftMonth(month, -1) }),
+    db.expense.findMany({ where: { deletedAt: null, date: { gte: since } }, select: { conceptId: true } }),
     db.expenseConcept.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
     recurringStatus(db, month),
     listExtraIncome(db, month),
   ]);
+  const uses = new Map<string, number>();
+  for (const e of recent) uses.set(e.conceptId, (uses.get(e.conceptId) ?? 0) + 1);
+  const topConcepts = [...uses.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id]) => id);
   const conceptViews: ConceptView[] = concepts.map((c) => ({ id: c.id, name: c.name, category: c.category as Category, active: c.active }));
   const extraViews: ExtraView[] = extra.map((e) => ({ id: e.id, date: e.date, concept: e.concept, amount: e.amount, note: e.note }));
   return (
@@ -33,6 +39,8 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
         summary={summary}
         recurring={recurring}
         extra={extraViews}
+        topConcepts={topConcepts}
+        prevTotal={prev.summary.total}
       />
     </Shell>
   );

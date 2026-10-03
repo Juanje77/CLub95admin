@@ -181,17 +181,18 @@ await recForm.getByRole("button", { name: "Agregar gasto fijo" }).click();
 await page.getByText("Gasto fijo guardado.").waitFor();
 await page.getByRole("button", { name: /Cargar ⚠/ }).click();
 const form = page.locator("#nuevo-gasto");
-check((await form.locator("select").inputValue()) !== "", "cargar un gasto fijo vencido deja el concepto elegido en el formulario");
+check((await form.locator("select").inputValue()) !== "" || (await form.locator('button.pill.on').count()) === 1, "cargar un gasto fijo vencido deja el concepto elegido en el formulario");
 await form.getByLabel(/Monto/).fill("793000");
-await form.getByRole("button", { name: "Guardar gasto" }).click();
+await form.locator("button.big").click();
 await page.getByText("Cargado ✓").waitFor();
 check(/Total del mes\s*\$ 793\.000/.test(await page.locator("body").innerText()), "el gasto fijo queda cargado y suma al total del mes");
 await form.locator("select").selectOption({ label: "LIMPIEZA" });
+await form.locator("summary", { hasText: "Más datos" }).click();
 await form.getByLabel(/Monto/).fill("15000");
 await form.getByLabel(/Descripción/).fill("Productos de limpieza");
 await form.locator('input[type="file"]').setInputFiles(jpegPath);
 await form.getByAltText("Vista previa del comprobante").waitFor();
-await form.getByRole("button", { name: "Guardar gasto" }).click();
+await form.locator("button.big").click();
 await page.getByText("Productos de limpieza").waitFor();
 const receipt = page.getByRole("link", { name: "Ver comprobante" }).first();
 const href = await receipt.getAttribute("href");
@@ -217,7 +218,7 @@ await page.waitForFunction(() => /Total del mes\s*\$ 120\.000/.test(document.bod
 check(true, "los otros ingresos (publicidad) se cargan por mes");
 
 // 9b. Panel del dueño: cifras del mes, Excel y permisos
-await page.getByRole("link", { name: "Panel" }).click();
+await page.getByRole("link", { name: "Panel", exact: true }).click();
 await page.getByRole("heading", { name: /Panel · octubre 2026/i }).waitFor();
 const stmt = (label) => page.locator("table.stmt tr", { hasText: label }).last().locator("td").last();
 check((await stmt("Total ingresos").innerText()).trim() === "$ 341.700", "panel: total ingresos = servicios + socios + bebida + cera + publicidad");
