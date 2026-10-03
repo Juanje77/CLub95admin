@@ -19,11 +19,15 @@ export default async function Shell({ user, children, alertCount, wide }: { user
       <main className={wide ? "wide" : undefined}>
         <header className="top">
           <div>
-            <div className="brand">
-              CLUB <span>95</span>
-            </div>
-            <div className="muted">
-              {user.name} · {user.role === "DUENO" ? "dueño" : user.role === "ADMIN" ? "admin" : "barbero"}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="logo" src="/logo-club95.png" alt="Club 95" width={44} height={44} />
+            <div>
+              <div className="brand">
+                CLUB <span>95</span>
+              </div>
+              <div className="muted">
+                {user.name} · {user.role === "DUENO" ? "dueño" : user.role === "ADMIN" ? "admin" : "barbero"}
+              </div>
             </div>
           </div>
           <div className="row">

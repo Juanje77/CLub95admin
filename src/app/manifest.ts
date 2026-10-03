@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Caja diaria, gastos y membresías",
     start_url: "/",
     display: "standalone",
-    background_color: "#f6f5f1",
-    theme_color: "#17140f",
+    background_color: "#efeae6",
+    theme_color: "#ff4701",
     lang: "es-AR",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

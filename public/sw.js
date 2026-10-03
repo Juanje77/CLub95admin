@@ -1,6 +1,6 @@
 // Service worker mínimo: cachea los archivos estáticos para que la app abra rápido y muestre
 // una pantalla clara si no hay conexión. Las operaciones de caja siempre van al servidor.
-const CACHE = "club95-static-v1";
+const CACHE = "club95-static-v2";
 const OFFLINE = "/offline.html";
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,7 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icon-")) {
+  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icon-") || url.pathname.startsWith("/logo-")) {
     e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); return res; })));
     return;
   }

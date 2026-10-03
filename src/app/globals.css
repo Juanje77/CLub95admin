@@ -1,11 +1,11 @@
 :root {
-  --bg: #f6f5f1;
-  --card: #ffffff;
-  --ink: #17140f;
+  --bg: #efeae6;
+  --card: #fcf9f6;
+  --ink: #111111;
   --muted: #6b665c;
-  --line: #e4e0d6;
-  --brand: #17140f;
-  --gold: #b8892b;
+  --line: #dcd6d0;
+  --brand: #111111;
+  --gold: #ff4701; /* naranja Club 95 */
   --ok: #1f7a4d;
   --warn: #b26a00;
   --err: #b3261e;
@@ -16,8 +16,8 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #12100c; --card: #1c1913; --ink: #f3efe6; --muted: #a39d8e; --line: #2e2a21;
-    --brand: #f3efe6; --gold: #d7a53a; --ok: #5fc891; --warn: #f0b04a; --err: #ff8a80;
+    --bg: #111111; --card: #1c1b1a; --ink: #f1ece8; --muted: #a8a29c; --line: #2f2d2b;
+    --brand: #f1ece8; --gold: #ff4701; --ok: #5fc891; --warn: #f0b04a; --err: #ff8a80;
     --ok-bg: #12301f; --warn-bg: #3a2a0c; --err-bg: #3b1613;
   }
 }
@@ -179,3 +179,7 @@ button.att.pending { outline: 2px dashed var(--warn); outline-offset: -2px; }
 .pill.on { background: var(--gold); color: #111; border-color: transparent; }
 .bigmoney { font-size: 1.6rem; font-weight: 700; }
 .more { margin-top: 10px; }
+
+.logo { display: inline-block; border-radius: 10px; vertical-align: middle; }
+header.top > div:first-child { display: flex; align-items: center; gap: 10px; }
+.login .logo { width: 96px; height: 96px; border-radius: 18px; margin-bottom: 12px; }
