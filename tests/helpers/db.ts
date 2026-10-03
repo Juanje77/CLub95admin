@@ -28,13 +28,13 @@ export interface Seed {
   jere: string;
   ale: string;
   lucio: string;
-  dueno: string;
+  juan: string;
 }
 
 export async function seed(db: PrismaClient): Promise<Seed> {
   const mk = (username: string, name: string, role: string, isBarber: boolean) =>
     db.user.create({ data: { username, name, role, isBarber, pinHash: hashPin("1234") } });
-  const [jere, ale, lucio, dueno] = [await mk("jere", "Jere", "BARBERO", true), await mk("ale", "Ale", "ADMIN", true), await mk("lucio", "Lucio", "BARBERO", true), await mk("dueno", "Dueño", "DUENO", false)];
+  const [jere, ale, lucio, juan] = [await mk("jere", "Jere", "BARBERO", true), await mk("ale", "Ale", "ADMIN", true), await mk("lucio", "Lucio", "BARBERO", true), await mk("juan", "Juan", "DUENO", false)];
   for (const [u, bp, drink] of [[jere, 6000, 1500], [ale, 10000, 3000], [lucio, 6000, 3000]] as const) {
     await db.barberRule.create({ data: { userId: u.id, validFrom: "2026-09-01", commissionBp: bp, drinkDeduction: drink, drinkCost: drink } });
   }
@@ -44,7 +44,7 @@ export async function seed(db: PrismaClient): Promise<Seed> {
   await db.paymentAccount.create({ data: { key: "MP_JERE", name: "MP Jere", kind: "TRANSFERENCIA", ownerUserId: jere.id } });
   await db.paymentAccount.create({ data: { key: "BRUBANK", name: "Brubank", kind: "TRANSFERENCIA" } });
   await db.paymentAccount.create({ data: { key: "EFECTIVO", name: "Efectivo", kind: "EFECTIVO" } });
-  return { jere: jere.id, ale: ale.id, lucio: lucio.id, dueno: dueno.id };
+  return { jere: jere.id, ale: ale.id, lucio: lucio.id, juan: juan.id };
 }
 
 export async function sale(

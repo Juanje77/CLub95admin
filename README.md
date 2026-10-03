@@ -134,7 +134,7 @@ Los días que no se abre (feriados, vacaciones) se marcan con `markClosedDay`.
 | ale | 2222 | admin (y barbero) |
 | lucio | 4444 | barbero (desde octubre 2026) |
 | beni | 3333 | inactivo: figura solo en el histórico de septiembre |
-| dueno | 9999 | dueño |
+| juan | 9999 | dueño |
 
 En septiembre 2026 Beni y Lucio compartían el puesto y la planilla no los separa (columna "BENI / LUCIO"): esas ventas quedan a nombre de Beni (inactivo).
 
@@ -161,7 +161,7 @@ Probado de punta a punta contra Postgres 16 (tablas, usuarios, build, login y la
    El build las reconoce aunque tengan prefijo o se llamen distinto (`src/lib/db-env.ts`).
 2. **Proyecto:** *Add New → Project → importar `Juanje77/CLub95admin`*. En *Settings → Git → Production Branch* poné la rama que tiene la app.
    El build lo toma de `vercel.json` (`npm run vercel-build`).
-3. **Primer deploy:** el build crea las tablas y, **solo si la base está vacía**, crea los usuarios jere, ale, lucio y dueno con **PIN al azar**
+3. **Primer deploy:** el build crea las tablas y, **solo si la base está vacía**, crea los usuarios jere, ale, lucio y juan (el dueño) con **PIN al azar**
    y los imprime **una sola vez** en el log del build (*Deployments → el deploy → Build Logs*, buscá "Usuarios creados con PIN al azar").
    **Anotá los PIN y no compartas capturas del log.** En los deploys siguientes no cambia ningún PIN. También fija como fecha de arranque de las alertas el día del primer deploy.
 4. Abrí la URL de Vercel en el celular y "Agregar a la pantalla de inicio".

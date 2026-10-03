@@ -38,7 +38,7 @@ beforeEach(async () => {
   ids = await seed(db);
   barbero = { id: ids.lucio, role: "BARBERO" };
   admin = { id: ids.ale, role: "ADMIN" };
-  dueno = { id: ids.dueno, role: "DUENO" };
+  dueno = { id: ids.juan, role: "DUENO" };
 });
 afterEach(async () => {
   await db.$disconnect();

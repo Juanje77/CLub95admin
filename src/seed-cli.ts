@@ -5,7 +5,7 @@ import { DEFAULT_PINS, seedCore, type PinMap } from "./seed";
 
 const randomPins = process.argv.includes("--random-pins");
 const pins: PinMap = randomPins
-  ? { jere: pin(), ale: pin(), beni: pin(), lucio: pin(), dueno: pin() }
+  ? { jere: pin(), ale: pin(), beni: pin(), lucio: pin(), juan: pin() }
   : DEFAULT_PINS;
 
 function pin() {

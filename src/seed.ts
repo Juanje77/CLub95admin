@@ -53,8 +53,8 @@ const ACCOUNTS: { key: string; name: string; kind: string; owner?: string }[] = 
 ];
 
 /** PIN por usuario. Por defecto los de ejemplo (solo desarrollo); en producción se generan al azar (`--random-pins`). */
-export type PinMap = Record<"jere" | "ale" | "beni" | "lucio" | "dueno", string>;
-export const DEFAULT_PINS: PinMap = { jere: "1111", ale: "2222", beni: "3333", lucio: "4444", dueno: "9999" };
+export type PinMap = Record<"jere" | "ale" | "beni" | "lucio" | "juan", string>;
+export const DEFAULT_PINS: PinMap = { jere: "1111", ale: "2222", beni: "3333", lucio: "4444", juan: "9999" };
 
 export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAULT_CATALOG, pins: PinMap = DEFAULT_PINS): Promise<Record<BarberKey, string>> {
   const ids = {} as Record<BarberKey, string>;
@@ -84,10 +84,15 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
     update: {},
     create: { userId: lucio.id, validFrom: LUCIO_FROM, commissionBp: 6000, drinkDeduction: 3000, drinkCost: 3000, note: "Mismas condiciones que Beni (a confirmar)" },
   });
+  // El dueño es Juan. Migración: antes se creaba un usuario genérico "dueno"; se renombra (mismo usuario, mismo PIN).
+  const legacyOwner = await db.user.findUnique({ where: { username: "dueno" } });
+  if (legacyOwner && !(await db.user.findUnique({ where: { username: "juan" } }))) {
+    await db.user.update({ where: { id: legacyOwner.id }, data: { username: "juan", name: "Juan" } });
+  }
   await db.user.upsert({
-    where: { username: "dueno" },
+    where: { username: "juan" },
     update: {},
-    create: { username: "dueno", name: "Dueño", role: "DUENO", isBarber: false, pinHash: hashPin(pins.dueno) },
+    create: { username: "juan", name: "Juan", role: "DUENO", isBarber: false, pinHash: hashPin(pins.juan) },
   });
   for (const a of ACCOUNTS) {
     const ownerId = a.owner ? (await db.user.findUnique({ where: { username: a.owner } }))?.id ?? null : null;
