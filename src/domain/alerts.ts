@@ -1,5 +1,5 @@
 import { boxBalance, daysBetween, lastRendicionDate, type BoxEntry } from "./cashbox";
-import { formatARS, formatDate, todayBA } from "./money";
+import { formatARS, formatDate, monthLabel, todayBA } from "./money";
 import type { Role } from "./types";
 
 export type AlertSeverity = "INFO" | "WARN" | "ERROR";
@@ -21,6 +21,7 @@ export type AlertCode =
   | "RENDICION_CON_DIFERENCIA"
   | "RETIRO_EFECTIVO_EXCEDE"
   | "STOCK_BAJO"
+  | "GASTO_FIJO_PENDIENTE"
   | "LIQUIDACION_PENDIENTE";
 
 export interface CloseAlert {
@@ -111,6 +112,8 @@ export interface AlertInput {
   settlements: SettlementState[];
   /** Productos activos con stock en el mínimo o por debajo (se calcula en el servicio). */
   lowStock?: { name: string; stock: number; minStock: number }[];
+  /** Gastos fijos del mes cuyo día de vencimiento ya pasó y todavía no se cargaron. */
+  recurringDue?: { id: string; concept: string; dayOfMonth: number; month: string }[];
   settings?: Partial<AlertSettings>;
 }
 
@@ -275,6 +278,14 @@ export function computeCloseAlerts(input: AlertInput): CloseAlert[] {
         });
       }
     }
+  }
+
+  // --- Gastos fijos ---
+  for (const r of input.recurringDue ?? []) {
+    add({
+      key: `GASTO_FIJO_PENDIENTE:${r.month}:${r.id}`, code: "GASTO_FIJO_PENDIENTE", severity: "WARN", audience: ["ADMIN", "DUENO"],
+      message: `Falta cargar ${r.concept} de ${monthLabel(r.month)} (vencía el día ${r.dayOfMonth}).`,
+    });
   }
 
   // --- Stock ---

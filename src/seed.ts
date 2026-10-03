@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { hashPin } from "./auth/pin";
+import { CONCEPT_CATEGORY } from "./domain/concepts";
 import type { BarberKey } from "./import/month";
 import { BARBER_NAMES, SYSTEM_FROM, SYSTEM_RULES, SYSTEM_TARIFFS } from "./import/rules";
 
@@ -94,6 +95,9 @@ export async function seedCore(db: PrismaClient, catalog: CatalogItem[] = DEFAUL
     update: {},
     create: { username: "juan", name: "Juan", role: "DUENO", isBarber: false, pinHash: hashPin(pins.juan) },
   });
+  for (const [name, category] of Object.entries(CONCEPT_CATEGORY)) {
+    await db.expenseConcept.upsert({ where: { name }, update: {}, create: { name, category } });
+  }
   for (const a of ACCOUNTS) {
     const ownerId = a.owner ? (await db.user.findUnique({ where: { username: a.owner } }))?.id ?? null : null;
     await db.paymentAccount.upsert({

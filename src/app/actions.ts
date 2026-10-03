@@ -10,6 +10,7 @@ import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError } from "../services/common";
+import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
 export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
@@ -183,5 +184,70 @@ export async function adminProductSettings(p: { productId: string; minStock?: nu
   return run(async (actor) => {
     await updateProductSettings(db, { actor, ...p });
     return "Guardado.";
+  });
+}
+
+// --- Gastos ----------------------------------------------------------------------------------------------------------------------
+
+export async function saveExpense(p: { date: string; conceptId: string; amount: number; description: string; receiptData: string | null }) {
+  return run(async (actor) => {
+    await addExpense(db, { actor, ...p, amount: int(p.amount) });
+    return "Gasto cargado.";
+  });
+}
+
+export async function editExpense(p: { id: string; date: string; conceptId: string; amount: number; description: string }) {
+  return run(async (actor) => {
+    await updateExpense(db, { actor, ...p, amount: int(p.amount) });
+    return "Gasto actualizado.";
+  });
+}
+
+export async function removeExpense(p: { id: string }) {
+  return run(async (actor) => {
+    await deleteExpense(db, { actor, ...p });
+    return "Gasto borrado.";
+  });
+}
+
+export async function saveConcept(p: { name: string; category: string }) {
+  return run(async (actor) => {
+    await createConcept(db, { actor, ...p });
+    return "Concepto creado.";
+  });
+}
+
+export async function toggleConcept(p: { id: string; active: boolean }) {
+  return run(async (actor) => {
+    await setConceptActive(db, { actor, ...p });
+    return p.active ? "Concepto activado." : "Concepto dado de baja.";
+  });
+}
+
+export async function saveRecurring(p: { conceptId: string; dayOfMonth: number; amount: number | null; description: string }) {
+  return run(async (actor) => {
+    await createRecurring(db, { actor, ...p, amount: p.amount ? int(p.amount) : null });
+    return "Gasto fijo guardado.";
+  });
+}
+
+export async function removeRecurring(p: { id: string }) {
+  return run(async (actor) => {
+    await deleteRecurring(db, { actor, ...p });
+    return "Gasto fijo borrado.";
+  });
+}
+
+export async function saveExtraIncome(p: { date: string; concept: string; amount: number; note: string }) {
+  return run(async (actor) => {
+    await addExtraIncome(db, { actor, ...p, amount: int(p.amount) });
+    return "Ingreso cargado.";
+  });
+}
+
+export async function removeExtraIncome(p: { id: string }) {
+  return run(async (actor) => {
+    await deleteExtraIncome(db, { actor, ...p });
+    return "Ingreso borrado.";
   });
 }

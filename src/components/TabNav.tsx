@@ -8,6 +8,7 @@ export default function TabNav({ admin, alertCount }: { admin: boolean; alertCou
   const tabs = admin
     ? [
         { href: "/", label: "Planilla" },
+        { href: "/gastos", label: "Gastos" },
         { href: "/efectivo", label: "Efectivo" },
         { href: "/alertas", label: "Alertas" },
         { href: "/mas", label: "Más" },

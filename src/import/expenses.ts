@@ -2,34 +2,8 @@ import type ExcelJS from "exceljs";
 import { cellValue, isoDate, num, str } from "./sheet";
 import type { Issue } from "./verify";
 
-export type ExpenseCategory = "VARIABLE" | "ESTRUCTURA" | "INVERSION" | "REPOSICION";
-
-/** Concepto → categoría, según los bloques de la hoja TOTALES. */
-export const CONCEPT_CATEGORY: Record<string, ExpenseCategory> = {
-  "HOJA DE AFEITAR": "VARIABLE",
-  CUELLOS: "VARIABLE",
-  GUANTES: "VARIABLE",
-  FARMACIA: "VARIABLE",
-  DESINFECTANTE: "VARIABLE",
-  LIMPIEZA: "VARIABLE",
-  ACEITE: "VARIABLE",
-  ALQUILER: "ESTRUCTURA",
-  LUZ: "ESTRUCTURA",
-  INTERNET: "ESTRUCTURA",
-  MUNICIPAL: "ESTRUCTURA",
-  "INGRESOS BRUTOS": "ESTRUCTURA",
-  MONOTRIBUTO: "ESTRUCTURA",
-  "FONDO DE COMERCIO": "ESTRUCTURA",
-  GESTION: "ESTRUCTURA",
-  RECEPCION: "ESTRUCTURA",
-  "SOL CM": "ESTRUCTURA",
-  GAS: "ESTRUCTURA",
-  REPARACIONES: "ESTRUCTURA",
-  TV: "INVERSION",
-  ESTUFA: "INVERSION",
-  "REPOSICION DE BEBIDAS": "REPOSICION",
-  "COSTO CERAS": "REPOSICION",
-};
+import { CONCEPT_CATEGORY, type ExpenseCategory } from "../domain/concepts";
+export { CONCEPT_CATEGORY, type ExpenseCategory };
 
 export interface ExpenseRow {
   row: number;

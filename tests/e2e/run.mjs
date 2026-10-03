@@ -2,7 +2,9 @@
 // Requiere el servidor corriendo (BASE_URL) y una base con `npm run seed`. Hoy debe caer en octubre de 2026 (reloj del servidor).
 // Uso: BASE_URL=http://localhost:3100 CHROME=/ruta/a/chrome SHOTS=/tmp/shots node tests/e2e/run.mjs
 import { chromium } from "playwright-core";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const SHOTS = process.env.SHOTS ?? "/tmp/club95-shots";
@@ -114,8 +116,57 @@ await page.getByRole("link", { name: /Alertas/ }).click();
 await page.getByRole("heading", { name: "Alertas" }).waitFor();
 await shot("alertas");
 
-// 9. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 page.on("dialog", (d) => d.accept());
+
+// 9. Gastos (admin): gasto fijo vencido, foto de comprobante, filtro, borrado y otros ingresos
+const jpegPath = join(tmpdir(), "comprobante.jpg");
+writeFileSync(jpegPath, Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==", "base64"));
+await page.getByRole("link", { name: "Gastos" }).click();
+await page.getByRole("heading", { name: /Gastos · octubre 2026/i }).waitFor();
+await page.locator("summary", { hasText: "Gastos fijos recurrentes" }).click();
+const recForm = page.locator("details", { hasText: "Gastos fijos recurrentes" }).locator("form");
+await recForm.locator("select").selectOption({ label: "ALQUILER" });
+await recForm.getByLabel(/Día del mes/).fill("1");
+await recForm.getByRole("button", { name: "Agregar gasto fijo" }).click();
+await page.getByText("Gasto fijo guardado.").waitFor();
+await page.getByRole("button", { name: /Cargar ⚠/ }).click();
+const form = page.locator("#nuevo-gasto");
+check((await form.locator("select").inputValue()) !== "", "cargar un gasto fijo vencido deja el concepto elegido en el formulario");
+await form.getByLabel(/Monto/).fill("793000");
+await form.getByRole("button", { name: "Guardar gasto" }).click();
+await page.getByText("Cargado ✓").waitFor();
+check(/Total del mes\s*\$ 793\.000/.test(await page.locator("body").innerText()), "el gasto fijo queda cargado y suma al total del mes");
+await form.locator("select").selectOption({ label: "LIMPIEZA" });
+await form.getByLabel(/Monto/).fill("15000");
+await form.getByLabel(/Descripción/).fill("Productos de limpieza");
+await form.locator('input[type="file"]').setInputFiles(jpegPath);
+await form.getByAltText("Vista previa del comprobante").waitFor();
+await form.getByRole("button", { name: "Guardar gasto" }).click();
+await page.getByText("Productos de limpieza").waitFor();
+const receipt = page.getByRole("link", { name: "Ver comprobante" }).first();
+const href = await receipt.getAttribute("href");
+const resp = await page.request.get(BASE + href);
+check(resp.status() === 200 && resp.headers()["content-type"] === "image/jpeg", "la foto del comprobante se guarda y se puede ver (solo con sesión de admin)");
+await shot("gastos");
+await page.getByLabel("Filtrar por concepto").selectOption({ label: "LIMPIEZA" });
+await page.waitForURL(/concepto=/);
+const gastosList = page.locator("h2", { hasText: "Gastos cargados" }).locator("xpath=following-sibling::ul[1]");
+await gastosList.getByText("Productos de limpieza").waitFor();
+check(!(await gastosList.innerText()).includes("ALQUILER"), "el filtro por concepto muestra solo ese concepto");
+await gastosList.locator("summary", { hasText: "Editar o borrar" }).click();
+await page.getByRole("button", { name: "Borrar", exact: true }).click();
+await page.getByText("Gasto borrado.").waitFor();
+await gastosList.getByText("Productos de limpieza").waitFor({ state: "detached" });
+check(true, "borrar un gasto lo saca del listado");
+await page.getByLabel("Filtrar por concepto").selectOption({ label: "Todos" });
+const extra = page.locator("h2", { hasText: "Otros ingresos" }).locator("xpath=following-sibling::div[1]");
+await extra.getByLabel("Monto ($)").fill("120000");
+await extra.getByRole("button", { name: "Agregar ingreso" }).click();
+await page.getByText("Ingreso cargado.").waitFor();
+await page.waitForFunction(() => /Total del mes\s*\$ 120\.000/.test(document.body.innerText));
+check(true, "los otros ingresos (publicidad) se cargan por mes");
+
+// 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más" }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();
 await page.getByRole("heading", { name: "Configuración" }).waitFor();

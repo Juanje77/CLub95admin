@@ -3,6 +3,7 @@ import { computeCloseAlerts, DEFAULT_ALERT_SETTINGS, type AlertSettings, type Cl
 import type { BoxKind } from "../domain/cashbox";
 import { todayBA } from "../domain/money";
 import { getDayCoverage } from "./figures";
+import { recurringStatus } from "./expenses";
 
 export async function loadAlertSettings(db: PrismaClient): Promise<AlertSettings> {
   const row = await db.setting.findUnique({ where: { key: "alerts" } });
@@ -84,7 +85,10 @@ export async function syncAlerts(db: PrismaClient, opts: { now?: Date; windowDay
 
   const lowStock = (await db.product.findMany({ where: { deletedAt: null, active: true, minStock: { gt: 0 } } })).filter((p) => p.stock <= p.minStock).map((p) => ({ name: p.name, stock: p.stock, minStock: p.minStock }));
 
-  const alerts = computeCloseAlerts({ now, days, closedDays, box, settlements, settings, lowStock });
+  const month = today.slice(0, 7);
+  const recurringDue = (await recurringStatus(db, month, now)).filter((r) => r.due).map((r) => ({ id: r.id, concept: r.concept, dayOfMonth: r.dayOfMonth, month }));
+
+  const alerts = computeCloseAlerts({ now, days, closedDays, box, settlements, settings, lowStock, recurringDue });
 
   const keys = new Set(alerts.map((a) => a.key));
   for (const a of alerts) {

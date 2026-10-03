@@ -182,6 +182,13 @@ describe("alertas de la fila de efectivo y la compensación", () => {
     expect(a[0]!.message).toContain("Coca-Cola: quedan 3 (mínimo 3)");
   });
 
+  it("recuerda el gasto fijo que venció y no se cargó", () => {
+    const a = computeCloseAlerts({ ...base, box: [], recurringDue: [{ id: "r1", concept: "ALQUILER", dayOfMonth: 5, month: "2026-10" }] });
+    expect(a.map((x) => [x.code, x.severity])).toEqual([["GASTO_FIJO_PENDIENTE", "WARN"]]);
+    expect(a[0]!.message).toBe("Falta cargar ALQUILER de octubre 2026 (vencía el día 5).");
+    expect(a[0]!.audience).toEqual(["ADMIN", "DUENO"]);
+  });
+
   it("alertsFor filtra por rol", () => {
     const box = [{ date: "2026-09-26", kind: "CIERRE" as const, amount: 30000 }];
     const a = computeCloseAlerts({ ...base, box, days: [open("2026-10-02")] });
