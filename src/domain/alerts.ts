@@ -20,6 +20,7 @@ export type AlertCode =
   | "RENDICION_ATRASADA"
   | "RENDICION_CON_DIFERENCIA"
   | "RETIRO_EFECTIVO_EXCEDE"
+  | "STOCK_BAJO"
   | "LIQUIDACION_PENDIENTE";
 
 export interface CloseAlert {
@@ -108,6 +109,8 @@ export interface AlertInput {
   /** Filas vigentes de la caja de efectivo. */
   box: (BoxEntry & { id?: string })[];
   settlements: SettlementState[];
+  /** Productos activos con stock en el mínimo o por debajo (se calcula en el servicio). */
+  lowStock?: { name: string; stock: number; minStock: number }[];
   settings?: Partial<AlertSettings>;
 }
 
@@ -272,6 +275,14 @@ export function computeCloseAlerts(input: AlertInput): CloseAlert[] {
         });
       }
     }
+  }
+
+  // --- Stock ---
+  for (const p of input.lowStock ?? []) {
+    add({
+      key: `STOCK_BAJO:${p.name}`, code: "STOCK_BAJO", severity: "WARN", audience: ["ADMIN", "DUENO"],
+      message: `${p.name}: quedan ${p.stock} (mínimo ${p.minStock}). Hay que reponer.`,
+    });
   }
 
   // --- Compensación de fin de mes ---

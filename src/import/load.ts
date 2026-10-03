@@ -1,10 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import { computeDay } from "../domain/cash";
 import { SERVICE_TYPES } from "../domain/types";
-import { hashPin } from "../auth/pin";
 import { CONCEPT_CATEGORY, type ExpenseRow } from "./expenses";
 import type { BarberKey, MonthData } from "./month";
-import { BARBER_NAMES, SYSTEM_FROM, SYSTEM_RULES, SYSTEM_TARIFFS } from "./rules";
+import { SYSTEM_TARIFFS, SYSTEM_RULES } from "./rules";
+import { seedCore, slotUsername, type CatalogItem } from "../seed";
 import { declaredPayments, extraSales } from "./verify";
 import type { Issue } from "./verify";
 
@@ -21,102 +21,18 @@ const LOOSE_PRODUCTS: Record<string, { name: string; priceKey: string }> = {
   ACQUARIUS: { name: "Aquarius", priceKey: "ACQUARIUS" },
 };
 
-// Septiembre 2026: Beni y Lucio compartían el puesto y la planilla no los separa (columna "BENI / LUCIO").
-// Desde octubre queda solo Lucio: Beni queda como usuario inactivo para conservar el histórico.
-const SEED_USERS: { key: BarberKey; username: string; role: string; pin: string; active: boolean; name: string }[] = [
-  { key: "JERE", username: "jere", role: "BARBERO", pin: "1111", active: true, name: BARBER_NAMES.JERE },
-  { key: "ALE", username: "ale", role: "ADMIN", pin: "2222", active: true, name: BARBER_NAMES.ALE },
-  { key: "BENI", username: "beni", role: "BARBERO", pin: "3333", active: false, name: BARBER_NAMES.BENI },
-];
-
-export const LUCIO_FROM = "2026-10-01";
-
-/** A qué usuario corresponde la columna "BENI / LUCIO" de la planilla según el mes. */
-export function slotUsername(yearMonth: string): string {
-  return `${yearMonth}-01` >= LUCIO_FROM ? "lucio" : "beni";
-}
-
-const ACCOUNTS: { key: string; name: string; kind: string; owner?: string }[] = [
-  { key: "EFECTIVO", name: "Efectivo", kind: "EFECTIVO" },
-  { key: "BRUBANK", name: "Brubank", kind: "TRANSFERENCIA" },
-  { key: "BRUBANK_JUAN", name: "Brubank Juan", kind: "TRANSFERENCIA" },
-  { key: "MP_JERE", name: "Mercado Pago Jere", kind: "TRANSFERENCIA", owner: "jere" },
-  { key: "MEMBRESIA_EFECTIVO", name: "Membresía en efectivo", kind: "EFECTIVO" },
-  { key: "MEMBRESIA_BANCO", name: "Membresía por Brubank/MP", kind: "TRANSFERENCIA" },
-];
-
 export async function seedBase(db: PrismaClient, m: MonthData): Promise<Record<BarberKey, string>> {
-  const ids = {} as Record<BarberKey, string>;
-  for (const u of SEED_USERS) {
-    const user = await db.user.upsert({
-      where: { username: u.username },
-      update: {},
-      create: { username: u.username, name: u.name, role: u.role, isBarber: true, active: u.active, pinHash: hashPin(u.pin) },
-    });
-    ids[u.key] = user.id;
-    for (const r of SYSTEM_RULES[u.key]) {
-      await db.barberRule.upsert({
-        where: { userId_validFrom: { userId: user.id, validFrom: r.validFrom } },
-        update: { commissionBp: r.commissionBp, drinkDeduction: r.drinkDeduction, drinkCost: r.drinkCost },
-        create: { userId: user.id, ...r },
-      });
-    }
-  }
-  const lucio = await db.user.upsert({
-    where: { username: "lucio" },
-    update: {},
-    create: { username: "lucio", name: "Lucio", role: "BARBERO", isBarber: true, pinHash: hashPin("4444") },
-  });
-  // Lucio ocupa el puesto de Beni desde octubre con las mismas condiciones (60%, bebida de $3.000): confirmar.
-  await db.barberRule.upsert({
-    where: { userId_validFrom: { userId: lucio.id, validFrom: LUCIO_FROM } },
-    update: {},
-    create: { userId: lucio.id, validFrom: LUCIO_FROM, commissionBp: 6000, drinkDeduction: 3000, drinkCost: 3000, note: "Mismas condiciones que Beni (a confirmar)" },
-  });
-  await db.user.upsert({
-    where: { username: "dueno" },
-    update: {},
-    create: { username: "dueno", name: "Dueño", role: "DUENO", isBarber: false, pinHash: hashPin("9999") },
-  });
-  for (const a of ACCOUNTS) {
-    const ownerId = a.owner ? (await db.user.findUnique({ where: { username: a.owner } }))?.id ?? null : null;
-    await db.paymentAccount.upsert({
-      where: { key: a.key },
-      update: {},
-      create: { key: a.key, name: a.name, kind: a.kind, ownerUserId: ownerId },
-    });
-  }
-  for (const t of SYSTEM_TARIFFS) {
-    await db.tariff.upsert({
-      where: { serviceType_validFrom: { serviceType: t.serviceType, validFrom: t.validFrom } },
-      update: { price: t.price },
-      create: t,
-    });
-  }
   const p = m.params;
-  const catalog: { name: string; kind: string; price: number; cost: number }[] = [
+  const catalog: CatalogItem[] = [
     { name: "Gaseosa de vidrio (incluida en el corte)", kind: "BEBIDA", price: 0, cost: p.glassDrinkCost },
-    ...Object.values(LOOSE_PRODUCTS).map((lp) => ({
-      name: lp.name,
-      kind: "BEBIDA",
-      price: p.looseDrinkPrice[lp.priceKey] ?? 0,
-      cost: p.looseDrinkCost[lp.priceKey] ?? 0,
-    })),
+    ...Object.values(LOOSE_PRODUCTS).map((lp) => ({ name: lp.name, kind: "BEBIDA", price: p.looseDrinkPrice[lp.priceKey] ?? 0, cost: p.looseDrinkCost[lp.priceKey] ?? 0 })),
     { name: "Cera 1", kind: "CERA", price: p.waxPrice, cost: p.waxCost },
     { name: "Cera 2", kind: "CERA", price: p.waxPrice, cost: p.waxCost },
     { name: "Cera 3", kind: "CERA", price: p.waxPrice, cost: p.waxCost },
     { name: "Polvo", kind: "POLVO", price: p.powderPrice, cost: p.powderCost },
     { name: "Aceite", kind: "ACEITE", price: p.oilPrice, cost: p.oilCost },
   ];
-  for (const c of catalog) {
-    const prod = await db.product.upsert({ where: { name: c.name }, update: {}, create: { name: c.name, kind: c.kind } });
-    await db.productPrice.upsert({
-      where: { productId_validFrom: { productId: prod.id, validFrom: SYSTEM_FROM } },
-      update: { price: c.price, cost: c.cost },
-      create: { productId: prod.id, validFrom: SYSTEM_FROM, price: c.price, cost: c.cost },
-    });
-  }
-  return ids;
+  return seedCore(db, catalog);
 }
 
 export interface LoadResult {

@@ -82,7 +82,9 @@ export async function syncAlerts(db: PrismaClient, opts: { now?: Date; windowDay
     }
   }
 
-  const alerts = computeCloseAlerts({ now, days, closedDays, box, settlements, settings });
+  const lowStock = (await db.product.findMany({ where: { deletedAt: null, active: true, minStock: { gt: 0 } } })).filter((p) => p.stock <= p.minStock).map((p) => ({ name: p.name, stock: p.stock, minStock: p.minStock }));
+
+  const alerts = computeCloseAlerts({ now, days, closedDays, box, settlements, settings, lowStock });
 
   const keys = new Set(alerts.map((a) => a.key));
   for (const a of alerts) {

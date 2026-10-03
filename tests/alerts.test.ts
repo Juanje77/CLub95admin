@@ -176,6 +176,12 @@ describe("alertas de la fila de efectivo y la compensación", () => {
     expect(currentMonth).toEqual([]);
   });
 
+  it("avisa los productos con stock en el mínimo", () => {
+    const a = computeCloseAlerts({ ...base, box: [], lowStock: [{ name: "Coca-Cola", stock: 3, minStock: 3 }] });
+    expect(a.map((x) => [x.code, x.severity])).toEqual([["STOCK_BAJO", "WARN"]]);
+    expect(a[0]!.message).toContain("Coca-Cola: quedan 3 (mínimo 3)");
+  });
+
   it("alertsFor filtra por rol", () => {
     const box = [{ date: "2026-09-26", kind: "CIERRE" as const, amount: 30000 }];
     const a = computeCloseAlerts({ ...base, box, days: [open("2026-10-02")] });

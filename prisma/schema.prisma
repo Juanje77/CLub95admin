@@ -15,16 +15,18 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  username  String    @unique
-  name      String
-  pinHash   String?
-  role      String // DUENO | ADMIN | BARBERO
-  isBarber  Boolean   @default(false) // Ale es ADMIN y además atiende
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id             String    @id @default(cuid())
+  username       String    @unique
+  name           String
+  pinHash        String?
+  role           String // DUENO | ADMIN | BARBERO
+  isBarber       Boolean   @default(false) // Ale es ADMIN y además atiende
+  active         Boolean   @default(true)
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
   rules       BarberRule[]
   sales       Sale[]
