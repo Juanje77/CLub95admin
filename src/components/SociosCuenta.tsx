@@ -5,7 +5,7 @@ import { saveMemberSessions } from "../app/actions";
 import type { StatementRow } from "../domain/members";
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import type { MembersMonth } from "../services/members";
-import { MemberPanel, NewMemberForm, PLAN_LABEL, STATUS_CHIP, STATUS_LABEL, TYPE_LABEL, ViewSwitch, type LedgerView, type PriceTable } from "./SociosGrid";
+import { MemberDrawer, MemberPanel, NewMemberForm, PLAN_LABEL, STATUS_CHIP, STATUS_LABEL, TYPE_LABEL, ViewSwitch, type LedgerView, type PriceTable } from "./SociosGrid";
 import { useAction } from "./useAction";
 
 const n = (v: number) => (v ? v.toLocaleString("es-AR") : "");
@@ -67,7 +67,7 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
 
   return (
     <>
-      <div className="row spread" style={{ margin: "4px 0 8px" }}>
+      <div className="monthnav">
         <Link className="btn" href={`/socios?mes=${prevMonth}`} aria-label="Mes anterior">←</Link>
         <h1 style={{ textTransform: "capitalize" }}>Socios · {monthLabel(data.month)}</h1>
         <Link className="btn" href={`/socios?mes=${nextMonth}`} aria-label="Mes siguiente">→</Link>
@@ -85,15 +85,16 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
           <thead>
             <tr>
               <th className="sticky label">Socio</th>
-              <th>Plan</th>
+              <th className="hm">Plan</th>
               <th>Ses.</th>
-              <th>Precio</th>
+              <th className="hm">Precio</th>
               <th>Total</th>
               <th>Cobrado</th>
-              <th>Dif.</th>
-              <th>Estado</th>
-              <th>Último pago</th>
+              <th className="hm">Dif.</th>
+              <th className="hm-estado">Estado</th>
+              <th className="hm">Último pago</th>
               <th>Saldo</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -103,34 +104,36 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
                   <tr key={m.id} className={m.active ? "" : "inactive"}>
                     <th className="sticky label">
                       <Link href={link(m.id)} scroll={false} style={{ textDecoration: "none" }}><b>{m.name}</b></Link>
-                      {!m.active && <div className="muted" style={{ fontSize: ".66rem" }}>baja</div>}
+                      <span className="sub">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]}{m.active ? "" : " · baja"}</span>
                     </th>
-                    <td style={{ textAlign: "left" }}>{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]}</td>
+                    <td className="hm txt">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]}</td>
                     <td style={{ padding: 0 }}><SessionsInput memberId={m.id} month={data.month} value={m.visits} manual={m.manual} name={m.name} /></td>
-                    <td>{n(m.price)}</td>
+                    <td className="hm">{n(m.price)}</td>
                     <td>{n(m.charged)}</td>
                     <td>{n(m.paid)}</td>
-                    <td className={m.diff < 0 ? "errc" : m.diff > 0 ? "okc" : ""}>{n(m.diff)}</td>
-                    <td style={{ textAlign: "center" }}>{m.status === "SIN_MOVIMIENTO" ? "" : <span className={`chip ${STATUS_CHIP[m.status]}`}>{STATUS_LABEL[m.status]}</span>}</td>
-                    <td>{m.lastPayDate ? formatDate(m.lastPayDate).slice(0, 5) : ""}</td>
+                    <td className={`hm ${m.diff < 0 ? "errc" : m.diff > 0 ? "okc" : ""}`}>{n(m.diff)}</td>
+                    <td className="hm-estado" style={{ textAlign: "center" }}>{m.status === "SIN_MOVIMIENTO" ? "" : <span className={`chip ${STATUS_CHIP[m.status]}`}>{STATUS_LABEL[m.status]}</span>}</td>
+                    <td className="hm">{m.lastPayDate ? formatDate(m.lastPayDate).slice(0, 5) : ""}</td>
                     <td className={m.balance > 0 ? "errc" : m.balance < 0 ? "okc" : ""}>{m.balance ? m.balance.toLocaleString("es-AR") : "✓"}</td>
+                    <td style={{ textAlign: "center", padding: "0 6px" }}><Link className="cobrar" href={link(m.id)} scroll={false} aria-label={`Cobrar a ${m.name}`}>Cobrar</Link></td>
                   </tr>
                 ))}
               </GroupRows>
             ))}
-            {data.members.length === 0 && <tr><td colSpan={10} style={{ textAlign: "left", padding: 12 }} className="muted">Todavía no hay socios cargados.</td></tr>}
+            {data.members.length === 0 && <tr><td colSpan={11} style={{ textAlign: "left", padding: 12 }} className="muted">Todavía no hay socios cargados.</td></tr>}
             {data.members.length > 0 && (
               <tr className="tone-strong">
                 <th className="sticky label">Totales del mes</th>
-                <td />
+                <td className="hm" />
                 <td>{t.visits}</td>
-                <td />
+                <td className="hm" />
                 <td>{n(t.charged)}</td>
                 <td>{n(t.paid)}</td>
-                <td className={t.paid - t.charged < 0 ? "errc" : ""}>{n(t.paid - t.charged)}</td>
-                <td />
-                <td />
+                <td className={`hm ${t.paid - t.charged < 0 ? "errc" : ""}`}>{n(t.paid - t.charged)}</td>
+                <td className="hm-estado" />
+                <td className="hm" />
                 <td className={t.debt > 0 ? "errc" : ""}>{n(t.debt)}</td>
+                <td />
               </tr>
             )}
           </tbody>
@@ -157,7 +160,11 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
         </ul>
       </div>
 
-      {selected && <MemberPanel key={selected.id} m={selected} ledger={ledger} statement={statement} barbers={barbers} today={today} />}
+      {selected && (
+        <MemberDrawer closeHref={`/socios?mes=${data.month}`}>
+          <MemberPanel key={selected.id} m={selected} ledger={ledger} statement={statement} barbers={barbers} today={today} />
+        </MemberDrawer>
+      )}
       <NewMemberForm barbers={barbers} prices={prices} />
       <p style={{ marginTop: 12 }}><Link href="/socios/importar">Cargar los socios desde la planilla de Excel →</Link></p>
     </>
@@ -167,7 +174,7 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
 function GroupRows({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <>
-      <tr className="section"><th className="sticky label">{title}</th><td colSpan={9} /></tr>
+      <tr className="section"><th className="sticky label">{title}</th><td colSpan={10} /></tr>
       {children}
     </>
   );

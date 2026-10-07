@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { editMember, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
 import { formatARS, formatDate, monthLabel, shiftMonth } from "../domain/money";
@@ -69,7 +70,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
   const [phone, setPhone] = useState(m.phone ?? "");
   const payMonth = payDate.slice(0, 7);
   return (
-    <section className="card" style={{ marginTop: 14 }} aria-label={`Cuenta de ${m.name}`}>
+    <section className="card" aria-label={`Cuenta de ${m.name}`}>
       <div className="row spread">
         <h2 style={{ margin: 0 }}>{m.name}</h2>
         <span className={`chip ${m.balance > 0 ? "err" : "ok"}`}>{m.balance > 0 ? `Debe ${formatARS(m.balance)}` : m.balance < 0 ? `A favor ${formatARS(-m.balance)}` : "Al día"}</span>
@@ -208,7 +209,7 @@ export default function SociosGrid({ data, days, today, prevMonth, nextMonth, is
 
   return (
     <>
-      <div className="row spread" style={{ margin: "4px 0 8px" }}>
+      <div className="monthnav">
         <Link className="btn" href={`/socios?mes=${prevMonth}&vista=asistencia`} aria-label="Mes anterior">←</Link>
         <h1 style={{ textTransform: "capitalize" }}>Socios · {monthLabel(data.month)}</h1>
         <Link className="btn" href={`/socios?mes=${nextMonth}&vista=asistencia`} aria-label="Mes siguiente">→</Link>
@@ -296,9 +297,33 @@ export default function SociosGrid({ data, days, today, prevMonth, nextMonth, is
       )}
 
       {offline.banner}
-      {isAdmin && selected && <MemberPanel key={selected.id} m={selected} ledger={ledger} statement={statement} barbers={barbers} today={today} />}
+      {isAdmin && selected && (
+        <MemberDrawer closeHref={`/socios?mes=${data.month}&vista=asistencia`}>
+          <MemberPanel key={selected.id} m={selected} ledger={ledger} statement={statement} barbers={barbers} today={today} />
+        </MemberDrawer>
+      )}
       {isAdmin && <NewMemberForm barbers={barbers} prices={prices} />}
     </>
+  );
+}
+
+/** Ficha del socio abierta encima de la tabla; se cierra con la cruz, tocando afuera o con Escape. */
+export function MemberDrawer({ closeHref, children }: { closeHref: string; children: React.ReactNode }) {
+  const router = useRouter();
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") router.push(closeHref, { scroll: false }); };
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
+  }, [closeHref, router]);
+  return (
+    <div className="drawer-back" role="dialog" aria-modal="true" aria-label="Ficha del socio" onClick={(e) => { if (e.target === e.currentTarget) router.push(closeHref, { scroll: false }); }}>
+      <div className="drawer">
+        <div className="drawer-top"><Link className="btn" href={closeHref} scroll={false} aria-label="Cerrar la ficha">Cerrar ✕</Link></div>
+        {children}
+      </div>
+    </div>
   );
 }
 

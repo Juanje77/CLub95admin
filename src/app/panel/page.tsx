@@ -36,7 +36,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
 
   return (
     <Shell user={user} wide>
-      <div className="row spread" style={{ margin: "4px 0 8px" }}>
+      <div className="monthnav">
         <Link className="btn noprint" href={`/panel?mes=${shiftMonth(month, -1)}`} aria-label="Mes anterior">←</Link>
         <h1 style={{ textTransform: "capitalize" }}>Panel · {monthLabel(month)}</h1>
         <Link className="btn noprint" href={`/panel?mes=${shiftMonth(month, 1)}`} aria-label="Mes siguiente">→</Link>

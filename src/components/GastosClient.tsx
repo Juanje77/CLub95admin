@@ -168,7 +168,7 @@ export default function GastosClient(p: Props) {
 
   return (
     <>
-      <div className="row spread" style={{ margin: "4px 0 8px" }}>
+      <div className="monthnav">
         <Link className="btn" href={`/gastos?mes=${p.prevMonth}`} aria-label="Mes anterior">←</Link>
         <h1 style={{ textTransform: "capitalize" }}>Gastos · {monthLabel(p.month)}</h1>
         <Link className="btn" href={`/gastos?mes=${p.nextMonth}`} aria-label="Mes siguiente">→</Link>

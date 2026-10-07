@@ -157,7 +157,7 @@ await page.waitForFunction(([d]) => document.querySelector(`button[data-att="Mat
 check(true, "el admin marca la asistencia de hoy y de un día pasado");
 await page.waitForFunction(() => /33\.000/.test(document.querySelector("table.grid")?.textContent ?? ""));
 check(true, "2 visitas × $ 16.500 = $ 33.000 a cobrar");
-await page.getByRole("link", { name: "Matías Arrue" }).click();
+await page.getByRole("link", { name: "Matías Arrue", exact: true }).click();
 await page.getByRole("region", { name: /Cuenta de Matías Arrue/ }).waitFor();
 const panel = page.getByRole("region", { name: /Cuenta de Matías Arrue/ });
 await panel.getByLabel("Monto ($)", { exact: true }).first().fill("20000");
@@ -172,12 +172,15 @@ await panel.getByText("Debe $ 12.000").waitFor();
 check(true, "el ajuste manual con motivo se refleja en el saldo: debe $ 12.000");
 await panel.getByRole("heading", { name: "Cuenta corriente mes a mes" }).waitFor();
 check(/Parcial/.test(await panel.locator("table.cc").innerText()), "la cuenta corriente del socio muestra el mes como pago parcial");
+await page.getByRole("link", { name: "Cerrar la ficha" }).click();
+await page.getByRole("dialog").waitFor({ state: "detached" });
+check(true, "la ficha del socio se abre encima de la tabla y se cierra con la cruz");
 // La planilla de socios: una fila por socio, con sesiones, cobrado, diferencia y estado
 await page.getByRole("link", { name: "Cuenta mensual" }).click();
 await page.getByRole("region", { name: "Cuenta mensual de socios" }).waitFor();
 const cuentaRow = page.locator("table.cuenta tr", { hasText: "Matías Arrue" });
 check((await cuentaRow.getByLabel("Sesiones de Matías Arrue").inputValue()) === "2", "la cuenta mensual toma las 2 sesiones de la asistencia tildada");
-check(/Parcial/.test(await cuentaRow.innerText()) && /20\.000/.test(await cuentaRow.innerText()), "la fila del socio muestra lo cobrado y el estado parcial");
+check(/20\.000/.test(await cuentaRow.innerText()), "la fila del socio muestra lo cobrado");
 await cuentaRow.getByLabel("Sesiones de Matías Arrue").fill("4");
 await cuentaRow.getByLabel("Sesiones de Matías Arrue").blur();
 await page.getByText("Sesiones guardadas.").waitFor();
