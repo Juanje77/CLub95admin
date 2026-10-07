@@ -1,0 +1,418 @@
+// Club 95 — modelo de datos.
+// Convenciones:
+//  - Dinero: enteros en pesos argentinos (sin decimales).
+//  - Fechas de negocio: String "YYYY-MM-DD" (zona America/Argentina/Buenos_Aires), así no hay corrimientos por UTC.
+//  - Nada se borra de verdad: deletedAt (baja lógica). Toda escritura debería dejar rastro en AuditLog.
+//  - "Enums" como String (validados en src/domain/types.ts) para poder pasar de SQLite (dev) a Postgres (deploy) sin tocar el esquema.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  username       String    @unique
+  name           String
+  pinHash        String?
+  role           String // DUENO | ADMIN | BARBERO
+  isBarber       Boolean   @default(false) // Ale es ADMIN y además atiende
+  active         Boolean   @default(true)
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  rules       BarberRule[]
+  sales       Sale[]
+  members     Member[]
+  accounts    PaymentAccount[]
+  settlements BarberSettlement[]
+  boxEntries  CashBoxEntry[]
+  attendances Attendance[]
+}
+
+// Comisión y descuento de bebida por barbero, con vigencia. Nunca fijos en el código.
+model BarberRule {
+  id             String    @id @default(cuid())
+  userId         String
+  validFrom      String // YYYY-MM-DD, vigente hasta la próxima regla del mismo barbero
+  commissionBp   Int // puntos básicos: 60% = 6000, 100% = 10000
+  drinkDeduction Int // $ que se descuenta del servicio antes de calcular la comisión
+  drinkCost      Int // $ de costo real de la bebida entregada por servicio
+  note           String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, validFrom])
+}
+
+// Tarifa por tipo de servicio, igual para todos los barberos (desde septiembre 2026).
+model Tariff {
+  id          String    @id @default(cuid())
+  serviceType String // CORTE | CORTE_BARBA | BARBA_CEJAS
+  validFrom   String
+  price       Int
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@unique([serviceType, validFrom])
+}
+
+model Product {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  kind      String // BEBIDA | CERA | POLVO | ACEITE
+  stock     Int       @default(0)
+  minStock  Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  prices ProductPrice[]
+  sales  Sale[]
+}
+
+model ProductPrice {
+  id        String @id @default(cuid())
+  productId String
+  validFrom String
+  price     Int // precio de venta
+  cost      Int // costo de compra
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([productId, validFrom])
+}
+
+// Una fila = una o más unidades vendidas el mismo día por el mismo barbero.
+// La importación histórica carga conteos diarios (quantity > 1, paymentMethod null).
+model Sale {
+  id            String    @id @default(cuid())
+  date          String
+  userId        String? // barbero; null = venta del local (ceras, bebidas sueltas)
+  kind          String // SERVICE | PRODUCT | MEMBERSHIP
+  serviceType   String?
+  productId     String?
+  quantity      Int       @default(1)
+  unitPrice     Int       @default(0)
+  drinkIncluded Boolean   @default(false)
+  paymentMethod String? // EFECTIVO | TRANSFERENCIA | MP | MEMBRESIA
+  memberId      String?
+  source        String    @default("APP") // APP | IMPORT
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  user    User?    @relation(fields: [userId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  member  Member?  @relation(fields: [memberId], references: [id])
+
+  @@index([date])
+  @@index([date, userId])
+}
+
+// Cierre de caja: UNO POR DÍA para todo el local (decisión del dueño, septiembre 2026).
+// expected* sale de las ventas; declared* lo carga quien cierra. Si hay diferencia, la nota es obligatoria.
+model CashClose {
+  id                String    @id @default(cuid())
+  date              String    @unique
+  expectedIncome    Int // ingresos del día según ventas
+  expectedCash      Int? // null en datos históricos (sin medio de pago por venta)
+  expectedTransfers Int?
+  labor             Int // mano de obra calculada
+  expectedNet       Int // "dinero que debe haber" = ingresos − mano de obra
+  declaredCash      Int       @default(0)
+  declaredTransfers Int       @default(0)
+  declaredTotal     Int // cobros declarados (efectivo + transferencias), sin cambio dejado
+  changeLeft        Int       @default(0) // cambio (fondo) que queda en la caja para el día siguiente
+  difference        Int // declaredTotal − expectedIncome (negativo = falta)
+  note              String?
+  status            String    @default("OPEN") // OPEN | CLOSED
+  source            String    @default("APP")
+  closedAt          DateTime?
+  closedById        String?
+  reopenedAt        DateTime?
+  reopenedById      String?
+  reopenReason      String?
+  createdAt         DateTime  @default(now())
+  deletedAt         DateTime?
+
+  lines      CashCloseLine[]
+  boxEntries CashBoxEntry[]
+}
+
+// Cuentas por las que entra plata. ownerUserId = cuenta propia de un barbero (lo que entra ahí "ya lo cobró" él).
+model PaymentAccount {
+  id          String    @id @default(cuid())
+  key         String    @unique // BRUBANK | BRUBANK_JUAN | MP_JERE | EFECTIVO ...
+  name        String
+  kind        String // EFECTIVO | TRANSFERENCIA
+  ownerUserId String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  owner User? @relation(fields: [ownerUserId], references: [id])
+}
+
+// Fila de efectivo acumulado: cada cierre suma el efectivo del día; los retiros de barberos y las rendiciones al dueño restan.
+// El saldo es la suma de `amount` (con signo) de las filas vigentes.
+model CashBoxEntry {
+  id             String    @id @default(cuid())
+  date           String
+  kind           String // CIERRE | RETIRO_BARBERO | RENDICION | AJUSTE
+  amount         Int // + entra a la caja, − sale
+  closeId        String?
+  userId         String? // barbero (retiro) o quien rindió
+  receivedBy     String? // quién recibió la rendición
+  expectedAmount Int? // en RENDICION: saldo que debía haber al rendir
+  note           String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  close CashClose? @relation(fields: [closeId], references: [id])
+  user  User?      @relation(fields: [userId], references: [id])
+
+  @@index([date])
+}
+
+// Compensación de fin de mes por barbero: lo que le corresponde cobrar (servicios + membresías) contra lo que ya cobró.
+model BarberSettlement {
+  id              String    @id @default(cuid())
+  userId          String
+  period          String // YYYY-MM
+  laborServices   Int
+  laborMembership Int
+  adjustments     Int       @default(0)
+  collected       Int // retiros en efectivo + transferencias a su cuenta propia
+  balance         Int // laborServices + laborMembership + adjustments − collected; + = el local le debe, − = él debe al local
+  status          String    @default("DRAFT") // DRAFT | CONFIRMED
+  note            String?
+  confirmedAt     DateTime?
+  confirmedById   String?
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, period])
+}
+
+// Día en que el local no abrió (feriado, vacaciones): evita la alerta de "día sin cierre".
+model ClosedDay {
+  id          String    @id @default(cuid())
+  date        String    @unique
+  reason      String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+// Alertas derivadas del estado de la caja. `key` evita duplicarlas; resolvedAt se completa cuando ya no aplican.
+model Alert {
+  id         String    @id @default(cuid())
+  key        String    @unique
+  code       String
+  severity   String // INFO | WARN | ERROR
+  audience   String // roles separados por coma: BARBERO,ADMIN,DUENO
+  date       String?
+  message    String
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+  ackById    String?
+  ackAt      DateTime?
+}
+
+model CashCloseLine {
+  id      String @id @default(cuid())
+  closeId String
+  account String // key de PaymentAccount (más MEMBRESIA_EFECTIVO / MEMBRESIA_BANCO en datos históricos)
+  amount  Int
+
+  close CashClose @relation(fields: [closeId], references: [id])
+}
+
+model ExpenseConcept {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  category  String // VARIABLE | ESTRUCTURA | INVERSION | REPOSICION
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  expenses  Expense[]
+  recurring RecurringExpense[]
+}
+
+model Expense {
+  id            String    @id @default(cuid())
+  date          String
+  conceptId     String
+  amount        Int
+  description   String?
+  receiptUrl    String?
+  receiptData   String? // foto del comprobante (JPEG reducido, data URL)
+  source        String    @default("APP")
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  concept ExpenseConcept @relation(fields: [conceptId], references: [id])
+
+  @@index([date])
+}
+
+model RecurringExpense {
+  id          String    @id @default(cuid())
+  conceptId   String
+  dayOfMonth  Int
+  amount      Int?
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  concept ExpenseConcept @relation(fields: [conceptId], references: [id])
+}
+
+model Member {
+  id          String    @id @default(cuid())
+  name        String
+  plan        String // BLACK | GOLD
+  phone       String?
+  startDate   String?
+  note        String?
+  serviceType String // CORTE | CORTE_BARBA
+  userId      String? // barbero asignado
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  user        User?          @relation(fields: [userId], references: [id])
+  prices      MemberPrice[]
+  months      MemberMonth[]
+  ledger      MemberLedger[]
+  sales       Sale[]
+  attendances Attendance[]
+}
+
+model MemberPrice {
+  id        String @id @default(cuid())
+  memberId  String
+  validFrom String
+  price     Int
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, validFrom])
+}
+
+// Sesiones del mes cargadas a mano ("SESIONES" de la planilla de socios). Si existe, manda sobre las asistencias tildadas.
+model MemberMonth {
+  id        String   @id @default(cuid())
+  memberId  String
+  month     String // YYYY-MM
+  sessions  Int
+  updatedAt DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, month])
+}
+
+model MemberLedger {
+  id        String    @id @default(cuid())
+  memberId  String
+  date      String
+  period    String // YYYY-MM al que corresponde
+  kind      String // CARGO | PAGO | AJUSTE
+  debit     Int       @default(0)
+  credit    Int       @default(0)
+  method    String? // EFECTIVO | BANCO
+  note      String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  member Member @relation(fields: [memberId], references: [id])
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  at       DateTime @default(now())
+  userId   String?
+  entity   String
+  entityId String
+  action   String // CREATE | UPDATE | DELETE | CLOSE | REOPEN | IMPORT
+  before   String?
+  after    String?
+
+  @@index([entity, entityId])
+}
+
+model ImportBatch {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  scope     String // p.ej. "2026-09"
+  fileName  String
+
+  issues ImportIssue[]
+}
+
+// Diferencias y rarezas detectadas en la planilla. Se informan, nunca se corrigen en silencio.
+model ImportIssue {
+  id       String  @id @default(cuid())
+  batchId  String
+  severity String // INFO | WARN | ERROR
+  code     String
+  message  String
+  detail   String?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id])
+}
+
+// Asistencia de un socio un día. Cada asistencia se cobra al precio vigente de la membresía y le suma al barbero que atendió.
+model Attendance {
+  id          String    @id @default(cuid())
+  memberId    String
+  date        String
+  userId      String? // barbero que lo atendió (por defecto el asignado al socio)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  member Member @relation(fields: [memberId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@unique([memberId, date])
+  @@index([date])
+}
+
+// Ingresos que no son cortes ni productos (publicidad, alquiler de yerba, etc.), como las filas "INGRESOS EXTRA" de TOTALES.
+model ExtraIncome {
+  id          String    @id @default(cuid())
+  date        String
+  concept     String
+  amount      Int
+  note        String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([date])
+}

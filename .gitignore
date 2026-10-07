@@ -1,0 +1,11 @@
+node_modules/
+.next/
+data/
+*.db
+*.db-journal
+.env
+dist/
+coverage/
+next-env.d.ts
+tsconfig.tsbuildinfo
+prisma/schema.postgres.prisma
