@@ -103,7 +103,7 @@ await page.getByRole("button", { name: "Salir" }).click();
 await page.waitForURL(/login/);
 await login("ale", "2222");
 const adminEfectivo = async () => {
-  await page.getByRole("link", { name: "Más" }).click();
+  await page.getByRole("link", { name: "Más", exact: true }).click();
   await page.getByRole("link", { name: /^Efectivo/ }).click();
   await page.getByText("Efectivo acumulado en la caja").waitFor();
 };
@@ -141,10 +141,14 @@ await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
 await page.locator("summary", { hasText: "Agregar un socio" }).click();
 const memberForm = page.locator("details", { hasText: "Agregar un socio" }).locator("form");
 await memberForm.getByLabel("Nombre", { exact: true }).fill("Matías Arrue");
-await memberForm.getByLabel("Tipo de plan").selectOption("CORTE_BARBA");
+await memberForm.getByLabel(/^Plan/).selectOption("BLACK");
+await memberForm.getByLabel(/^Tipo/).selectOption("CORTE_BARBA");
 await memberForm.getByLabel("Barbero asignado").selectOption({ label: "Jere" });
+await memberForm.getByLabel(/Precio por sesión/).fill("16500");
 await memberForm.getByRole("button", { name: "Agregar socio" }).click();
 await page.getByText("Socio agregado.").waitFor();
+await page.getByRole("link", { name: "Asistencia por día" }).click();
+await page.waitForFunction(() => !!document.querySelector("table.grid .att, table.grid button.att"));
 const att = (date) => page.locator(`button[data-att="Matías Arrue|${date}"]`);
 await att(TODAY).click();
 await page.waitForFunction(([d]) => document.querySelector(`button[data-att="Matías Arrue|${d}"]`)?.getAttribute("aria-pressed") === "true", [TODAY]);
@@ -166,6 +170,24 @@ await panel.getByLabel(/Motivo \(obligatorio\)/).fill("Descuento por demora");
 await panel.getByRole("button", { name: "Guardar ajuste" }).click();
 await panel.getByText("Debe $ 12.000").waitFor();
 check(true, "el ajuste manual con motivo se refleja en el saldo: debe $ 12.000");
+await panel.getByRole("heading", { name: "Cuenta corriente mes a mes" }).waitFor();
+check(/Parcial/.test(await panel.locator("table.cc").innerText()), "la cuenta corriente del socio muestra el mes como pago parcial");
+// La planilla de socios: una fila por socio, con sesiones, cobrado, diferencia y estado
+await page.getByRole("link", { name: "Cuenta mensual" }).click();
+await page.getByRole("region", { name: "Cuenta mensual de socios" }).waitFor();
+const cuentaRow = page.locator("table.cuenta tr", { hasText: "Matías Arrue" });
+check((await cuentaRow.getByLabel("Sesiones de Matías Arrue").inputValue()) === "2", "la cuenta mensual toma las 2 sesiones de la asistencia tildada");
+check(/Parcial/.test(await cuentaRow.innerText()) && /20\.000/.test(await cuentaRow.innerText()), "la fila del socio muestra lo cobrado y el estado parcial");
+await cuentaRow.getByLabel("Sesiones de Matías Arrue").fill("4");
+await cuentaRow.getByLabel("Sesiones de Matías Arrue").blur();
+await page.getByText("Sesiones guardadas.").waitFor();
+await page.waitForFunction(() => /66\.000/.test(document.querySelector("table.cuenta")?.textContent ?? ""));
+check(true, "cargar 4 sesiones a mano cobra 4 × $ 16.500 = $ 66.000");
+await cuentaRow.getByLabel("Sesiones de Matías Arrue").fill("");
+await cuentaRow.getByLabel("Sesiones de Matías Arrue").blur();
+await page.waitForFunction(() => /33\.000/.test(document.querySelector("table.cuenta")?.textContent ?? "") && !/66\.000/.test(document.querySelector("table.cuenta")?.textContent ?? ""));
+check(true, "borrar las sesiones vuelve a contar la asistencia tildada");
+check(/Matías Arrue/.test(await page.locator("h2", { hasText: "quién debe" }).locator("xpath=following-sibling::div[1]").innerText()), "la lista de cuenta corriente muestra al socio con deuda");
 await shot("socios");
 
 // 9. Gastos (admin): gasto fijo vencido, foto de comprobante, filtro, borrado y otros ingresos
@@ -233,7 +255,7 @@ check(xl2.status() === 200, "la planilla del mes también se exporta a Excel");
 await shot("panel");
 
 // 9c. Auditoría: quién hizo qué
-await page.getByRole("link", { name: "Más" }).click();
+await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /^Auditoría/ }).click();
 await page.getByRole("heading", { name: "Auditoría" }).waitFor();
 await page.getByLabel("Qué").selectOption({ label: "Gasto" });
@@ -243,8 +265,26 @@ const auditText = await page.locator("ul.list").innerText();
 check(auditText.includes("Gasto") && auditText.includes("Borró"), "la auditoría muestra quién creó y quién borró cada gasto");
 check(!/scrypt|pinHash/i.test(await page.locator("body").innerText()), "la auditoría nunca muestra PIN ni hashes");
 
+// 9c. Socios: plan Gold con el precio del plan y sesiones cargadas a mano
+await page.getByRole("link", { name: "Socios" }).click();
+await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+await page.locator("summary", { hasText: "Agregar un socio" }).click();
+const goldForm = page.locator("details", { hasText: "Agregar un socio" }).locator("form");
+await goldForm.getByLabel("Nombre", { exact: true }).fill("Tomás Gold");
+await goldForm.getByLabel(/^Plan/).selectOption("GOLD");
+await goldForm.getByLabel(/^Tipo/).selectOption("CORTE_BARBA");
+await goldForm.getByLabel("Barbero asignado").selectOption({ label: "Jere" });
+await goldForm.getByRole("button", { name: "Agregar socio" }).click();
+await page.getByText("Socio agregado.").waitFor();
+const goldRow = page.locator("table.cuenta tr", { hasText: "Tomás Gold" });
+await goldRow.getByLabel("Sesiones de Tomás Gold").fill("4");
+await goldRow.getByLabel("Sesiones de Tomás Gold").blur();
+await page.waitForFunction(() => /92\.000/.test(document.querySelector("table.cuenta")?.textContent ?? ""));
+check(true, "plan Gold corte y barba: 4 sesiones × $ 23.000 = $ 92.000");
+await shot("socios-cuenta");
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
-await page.getByRole("link", { name: "Más" }).click();
+await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();
 await page.getByRole("heading", { name: "Configuración" }).waitFor();
 const jereRow = page.locator("li", { hasText: "Jere" }).filter({ has: page.getByRole("button", { name: "Resetear PIN" }) }).first();

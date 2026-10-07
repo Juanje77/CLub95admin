@@ -10,7 +10,7 @@ import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError } from "../services/common";
-import { addMemberPrice, adjustMember, createMember, registerPayment, setAttendance, updateMember, voidLedgerEntry } from "../services/members";
+import { addMemberPrice, adjustMember, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
@@ -261,14 +261,14 @@ export async function toggleAttendance(p: { memberId: string; date: string; pres
   });
 }
 
-export async function saveMember(p: { name: string; serviceType: string; userId: string | null; price: number | null; phone: string; note: string }) {
+export async function saveMember(p: { name: string; plan: string; serviceType: string; userId: string | null; price: number | null; phone: string; note: string }) {
   return run(async (actor) => {
     await createMember(db, { actor, ...p, price: p.price ? int(p.price) : undefined });
     return "Socio agregado.";
   });
 }
 
-export async function editMember(p: { id: string; name: string; userId: string | null; serviceType: string; phone: string; active: boolean }) {
+export async function editMember(p: { id: string; name: string; plan?: string; userId: string | null; serviceType: string; phone: string; active: boolean }) {
   return run(async (actor) => {
     await updateMember(db, { actor, ...p });
     return "Socio actualizado.";
@@ -282,10 +282,17 @@ export async function saveMemberPrice(p: { memberId: string; validFrom: string; 
   });
 }
 
-export async function saveMemberPayment(p: { memberId: string; date: string; amount: number; method: string; note: string }) {
+export async function saveMemberPayment(p: { memberId: string; date: string; amount: number; method: string; period?: string; note: string }) {
   return run(async (actor) => {
-    await registerPayment(db, { actor, ...p, amount: int(p.amount) });
+    await registerPayment(db, { actor, ...p, period: p.period || undefined, amount: int(p.amount) });
     return "Cobro registrado.";
+  });
+}
+
+export async function saveMemberSessions(p: { memberId: string; month: string; sessions: number | null }) {
+  return run(async (actor) => {
+    await setMemberSessions(db, { actor, ...p });
+    return "Sesiones guardadas.";
   });
 }
 

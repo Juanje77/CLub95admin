@@ -183,3 +183,8 @@ button.att.pending { outline: 2px dashed var(--warn); outline-offset: -2px; }
 .logo { display: inline-block; border-radius: 10px; vertical-align: middle; }
 header.top > div:first-child { display: flex; align-items: center; gap: 10px; }
 .login .logo { width: 96px; height: 96px; border-radius: 18px; margin-bottom: 12px; }
+
+/* Socios: cuenta mensual (una fila por socio, como la planilla) */
+table.grid.cuenta td { min-width: 58px; }
+table.grid.cuenta input.cell { width: 52px; min-width: 0; text-align: center; font-weight: 700; }
+table.grid.cc td, table.grid.cc th { font-size: .78rem; }

@@ -5,7 +5,7 @@ Reemplaza la planilla `CLUB95_GESTION_ALE.xlsx`. Se usa desde el celular (instal
 | Módulo | Para qué | Quién |
 |---|---|---|
 | **Planilla** | Cantidad de servicios, socios, bebidas y ceras de cada día; control del día (ingresos, mano de obra, dinero que debe haber, **ganancia del día**); dinero ingresado y cierre de caja | barberos (lo suyo, hoy) · admin/dueño (todo) |
-| **Socios** | Asistencia mensual de los socios, cuenta corriente (debe/haber/saldo), cobros y ajustes con motivo | barberos tildan hoy · admin/dueño todo |
+| **Socios** | Planilla mensual de socios (sesiones, total, cobrado, diferencia, estado), cuenta corriente que arrastra la deuda, cobros y ajustes con motivo; asistencia por día | barberos tildan hoy · admin/dueño todo |
 | **Gastos** | Alta rápida con foto del comprobante, conceptos, gastos fijos con recordatorio, otros ingresos | admin/dueño |
 | **Panel** | Resumen mensual tipo `TOTALES`, comparativo de 6 meses, ranking de barberos, días fuertes y flojos, descuadres. Excel y PDF | admin/dueño |
 | **Efectivo** | Fila de efectivo acumulado, retiros de barberos, rendición al dueño | barbero (su retiro) · admin/dueño |
@@ -38,7 +38,7 @@ Reglas de permisos: un barbero carga **lo suyo y solo hoy**; cargar un día pasa
 | Tarifas (iguales para todos) | Corte $ 20.000 · Corte y barba $ 22.000 · Barba y cejas $ 15.000 |
 | Bebida incluida (se descuenta antes de la comisión) | Jere $ 1.500 · Ale y Lucio $ 3.000 |
 | Comisión | Jere 60% · Lucio 60% (mismas condiciones que Beni, a confirmar) · Ale 100% (administración): $ 17.000 / $ 19.000 por corte / corte y barba |
-| Membresía | $ 15.000 (corte) / $ 16.500 (corte y barba) **por visita**; el barbero cobra (precio − bebida) × su comisión |
+| Membresía | Black $ 16.250 / $ 17.500 · Gold $ 20.000 / $ 23.000 (corte / corte y barba) **por sesión**; el barbero cobra (precio − bebida) × su comisión |
 
 Nada de esto está fijo en el código: vive en tablas con **vigencia por fecha** (`Tariff`, `BarberRule`, `ProductPrice`, `MemberPrice`) y se cambia desde *Configuración*. Un cambio rige desde su fecha; el pasado no se reescribe (solo el dueño puede corregir hacia atrás).
 Moneda ARS sin decimales (`$ 12.500`), fechas `dd/mm/aaaa`, zona horaria `America/Argentina/Buenos_Aires`.
@@ -67,10 +67,16 @@ Las compras de mercadería (`REPOSICION`) no restan del resultado: su costo ya e
 
 ## Membresías
 
-- Cada socio tiene tipo (corte / corte y barba), barbero asignado y precio por visita con vigencia.
-- La **asistencia** se tilda por día; cada visita se cobra al precio vigente y suma al barbero que atendió.
-- **Cuenta corriente:** cargos (visitas × precio) − cobros ± ajustes = saldo. Los cobros llevan medio (efectivo / banco) y entran a la caja del día en que se registran. Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).
-- Se muestra cuánto aporta cada socio al barbero y al local. Si la asistencia no coincide con los "socios" que se cargaron en la planilla, aparece una nota de diferencias (no se corrige sola).
+Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila por socio y por mes**.
+
+- Cada socio tiene **plan** (Black / Gold), **tipo** (corte / corte y barba), barbero asignado y precio por sesión con vigencia. Precios por defecto: Black $ 16.250 / $ 17.500, Gold $ 20.000 / $ 23.000 (se cambian en `Setting` `memberPrices`; un socio puede tener un precio propio, como el de $ 13.750 de la planilla).
+- **Sesiones del mes:** se escribe el número en la tabla (como la columna SESIONES). Si no se escribe, se cuentan las asistencias tildadas en la vista *Asistencia por día*. Vaciar el campo vuelve a contar la asistencia.
+- Por fila: **total** (sesiones × precio), **cobrado**, **diferencia** (cobrado − total), **estado** (Pagó / Parcial / Impago), fecha del último pago y saldo.
+- **Cuenta corriente** (si un socio no paga): lo que no se paga **se arrastra de un mes al siguiente** y queda a la vista en "quién debe" (con desde qué mes) y, por socio, en una tabla mes a mes con saldo acumulado.
+- **Cobros:** llevan medio (efectivo / banco) y entran a la caja del día en que se cobran. El campo **Corresponde a** (la columna MES QUE CORRESPONDE) indica el mes de servicio que cubre: mes anterior, actual o siguiente; si se deja en automático, cubre el mes **más viejo que debe** (y si no debe nada, queda como pago adelantado).
+- Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).
+- El **barbero** cobra (precio − bebida) × su comisión por cada sesión que atendió, haya pagado o no el socio: si un socio no paga, el local es quien carga con esa deuda y la sigue reclamando en la cuenta corriente.
+- Si la asistencia tildada no coincide con los "socios" cargados en la planilla del día, aparece una nota de diferencias (no se corrige sola).
 
 ## Gastos
 

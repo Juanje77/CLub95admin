@@ -33,7 +33,7 @@ async function build() {
   await setProductCount(db, { actor: ale, date: "2026-10-02", productId: coca.id, count: 2, now: NOW });
   await setProductCount(db, { actor: ale, date: "2026-10-02", productId: cera.id, count: 1, now: NOW });
 
-  const socio = await createMember(db, { actor: ale, name: "Matías", serviceType: "CORTE_BARBA", userId: ids.lucio, startDate: "2026-09-01", now: NOW });
+  const socio = await createMember(db, { actor: ale, name: "Matías", serviceType: "CORTE_BARBA", userId: ids.lucio, price: 16500, startDate: "2026-09-01", now: NOW });
   for (const d of ["2026-10-02", "2026-10-03"]) await setAttendance(db, { actor: ale, memberId: socio.id, date: d, present: true, barberId: ids.lucio, now: NOW });
   await addExtraIncome(db, { actor: ale, date: "2026-10-03", concept: "Publicidad", amount: 120000, now: NOW });
 

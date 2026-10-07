@@ -306,6 +306,7 @@ model Member {
 
   user        User?          @relation(fields: [userId], references: [id])
   prices      MemberPrice[]
+  months      MemberMonth[]
   ledger      MemberLedger[]
   sales       Sale[]
   attendances Attendance[]
@@ -320,6 +321,19 @@ model MemberPrice {
   member Member @relation(fields: [memberId], references: [id])
 
   @@unique([memberId, validFrom])
+}
+
+// Sesiones del mes cargadas a mano ("SESIONES" de la planilla de socios). Si existe, manda sobre las asistencias tildadas.
+model MemberMonth {
+  id        String   @id @default(cuid())
+  memberId  String
+  month     String // YYYY-MM
+  sessions  Int
+  updatedAt DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, month])
 }
 
 model MemberLedger {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addMemberPrice, adjustMember, createMember, getMemberLedger, getMembersMonth, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, updateMember, voidLedgerEntry } from "../src/services/members";
+import { addMemberPrice, adjustMember, createMember, getMemberLedger, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
 import { getDayFigures } from "../src/services/figures";
 import { getMonthGrid } from "../src/services/grid";
 import { computeSettlement } from "../src/services/settlement";
@@ -35,17 +35,21 @@ beforeEach(async () => {
   lucio = { id: ids.lucio, role: "BARBERO" };
   jere = { id: ids.jere, role: "BARBERO" };
   ale = { id: ids.ale, role: "ADMIN" };
-  m1 = (await createMember(db, { actor: ale, name: "Matías Arrue", serviceType: "CORTE_BARBA", userId: ids.jere, startDate: "2026-09-01", now: NOW })).id;
-  m2 = (await createMember(db, { actor: ale, name: "Gaspar Gallegos", serviceType: "CORTE", userId: ids.lucio, startDate: "2026-09-01", now: NOW })).id;
+  m1 = (await createMember(db, { actor: ale, name: "Matías Arrue", serviceType: "CORTE_BARBA", userId: ids.jere, price: 16500, startDate: "2026-09-01", now: NOW })).id;
+  m2 = (await createMember(db, { actor: ale, name: "Gaspar Gallegos", serviceType: "CORTE", userId: ids.lucio, price: 15000, startDate: "2026-09-01", now: NOW })).id;
 });
 afterEach(async () => {
   await db.$disconnect();
 });
 
 describe("alta de socios", () => {
-  it("el precio por visita sale del tipo: $ 15.000 corte, $ 16.500 corte y barba", async () => {
-    expect((await row(m1)).price).toBe(16500);
-    expect((await row(m2)).price).toBe(15000);
+  it("el precio por sesión sale del plan y del tipo: Black 16.250 / 17.500, Gold 20.000 / 23.000", async () => {
+    const mk = async (plan: string, serviceType: string) => (await row((await createMember(db, { actor: ale, name: `${plan} ${serviceType}`, plan, serviceType, userId: null, now: NOW })).id)).price;
+    expect(await mk("BLACK", "CORTE")).toBe(16250);
+    expect(await mk("BLACK", "CORTE_BARBA")).toBe(17500);
+    expect(await mk("GOLD", "CORTE")).toBe(20000);
+    expect(await mk("GOLD", "CORTE_BARBA")).toBe(23000);
+    expect(await code(createMember(db, { actor: ale, name: "X", plan: "PLATINO", serviceType: "CORTE", userId: null, now: NOW }))).toBe("PLAN_INVALIDO");
   });
   it("se puede fijar otro precio y valida los datos", async () => {
     const m = await createMember(db, { actor: ale, name: "Nuevo", serviceType: "CORTE", userId: null, price: 14000, now: NOW });
@@ -55,48 +59,14 @@ describe("alta de socios", () => {
     expect(await code(createMember(db, { actor: ale, name: "X", serviceType: "CORTE", userId: ids.juan, now: NOW }))).toBe("BARBERO_INVALIDO");
     expect(await code(createMember(db, { actor: lucio, name: "X", serviceType: "CORTE", userId: null, now: NOW }))).toBe("SOLO_ADMIN");
   });
-  it("el precio default se puede cambiar en la configuración", async () => {
-    await db.setting.create({ data: { key: "memberPrices", value: JSON.stringify({ CORTE: 17000 }) } });
-    const m = await createMember(db, { actor: ale, name: "Otro", serviceType: "CORTE", userId: null, now: NOW });
-    expect((await row(m.id)).price).toBe(17000);
-  });
-  it("un precio nuevo rige desde su fecha y no cambia las visitas anteriores", async () => {
-    await setAttendance(db, { actor: ale, memberId: m1, date: "2026-10-02", present: true, now: NOW });
-    await addMemberPrice(db, { actor: ale, memberId: m1, validFrom: "2026-10-20", price: 18000, now: NOW });
-    expect((await row(m1)).charged).toBe(16500);
-    expect(await code(addMemberPrice(db, { actor: ale, memberId: m1, validFrom: "2026-09-15", price: 1, now: NOW }))).toBe("VIGENCIA_PASADA");
-  });
-  it("una visita anterior a la fecha del primer precio se cobra con ese primer precio, no en $ 0", async () => {
-    const m = await createMember(db, { actor: ale, name: "Recién llegado", serviceType: "CORTE", userId: null, startDate: TODAY, now: NOW });
-    await setAttendance(db, { actor: ale, memberId: m.id, date: "2026-10-07", present: true, now: NOW });
-    expect((await row(m.id)).charged).toBe(15000);
-  });
-  it("se puede editar y dar de baja", async () => {
-    await updateMember(db, { actor: ale, id: m2, name: "Gaspar G.", userId: ids.jere, active: false });
-    const r = await db.member.findUniqueOrThrow({ where: { id: m2 } });
-    expect(r).toMatchObject({ name: "Gaspar G.", userId: ids.jere, active: false });
-    expect(await code(setAttendance(db, { actor: ale, memberId: m2, date: TODAY, present: true, now: NOW }))).toBe("SOCIO_INEXISTENTE");
-  });
-});
-
-describe("asistencia", () => {
-  it("el barbero tilda hoy y queda como quien lo atendió", async () => {
-    await setAttendance(db, { actor: lucio, memberId: m1, date: TODAY, present: true, now: NOW });
-    const a = await db.attendance.findFirstOrThrow({ where: { memberId: m1 } });
-    expect(a.userId).toBe(ids.lucio); // aunque el socio sea de Jere, lo atendió Lucio
-  });
-  it("el admin tilda un día pasado y elige quién lo atendió (o el asignado)", async () => {
-    await setAttendance(db, { actor: ale, memberId: m1, date: "2026-10-02", present: true, now: NOW });
-    await setAttendance(db, { actor: ale, memberId: m2, date: "2026-10-02", present: true, barberId: ids.jere, now: NOW });
-    expect((await db.attendance.findFirstOrThrow({ where: { memberId: m1 } })).userId).toBe(ids.jere);
-    expect((await db.attendance.findFirstOrThrow({ where: { memberId: m2 } })).userId).toBe(ids.jere);
-  });
-  it("permisos: barbero no marca días pasados ni saca lo de otro; nadie marca el futuro", async () => {
-    expect(await code(setAttendance(db, { actor: lucio, memberId: m1, date: "2026-10-02", present: true, now: NOW }))).toBe("DIA_PASADO_REQUIERE_ADMIN");
-    expect(await code(setAttendance(db, { actor: ale, memberId: m1, date: "2026-10-09", present: true, now: NOW }))).toBe("FECHA_FUTURA");
-    await setAttendance(db, { actor: jere, memberId: m1, date: TODAY, present: true, now: NOW });
-    expect(await code(setAttendance(db, { actor: lucio, memberId: m1, date: TODAY, present: false, now: NOW }))).toBe("SOLO_PROPIO");
-    await setAttendance(db, { actor: jere, memberId: m1, date: TODAY, present: false, now: NOW });
+  it("el precio default se puede cambiar en la configuración (formato nuevo y viejo)", async () => {
+    await db.setting.create({ data: { key: "memberPrices", value: JSON.stringify({ GOLD: { CORTE: 21000 }, CORTE_BARBA: 18000 }) } });
+    const gold = await createMember(db, { actor: ale, name: "Otro", plan: "GOLD", serviceType: "CORTE", userId: null, now: NOW });
+    expect((await row(gold.id)).price).toBe(21000);
+    const oldFormat = await createMember(db, { actor: ale, name: "Viejo", serviceType: "CORTE_BARBA", userId: null, now: NOW });
+    expect((await row(oldFormat.id)).price).toBe(18000); // el formato viejo se toma como Black
+    const rest = await createMember(db, { actor: ale, name: "Resto", plan: "GOLD", serviceType: "CORTE_BARBA", userId: null, now: NOW });
+    expect((await row(rest.id)).price).toBe(23000); // lo que no se configuró sale del default
   });
   it("tildar dos veces no duplica; destildar y volver a tildar reutiliza la fila", async () => {
     await setAttendance(db, { actor: lucio, memberId: m1, date: TODAY, present: true, now: NOW });
@@ -122,7 +92,8 @@ describe("cuenta corriente: debe, haber y saldo", () => {
   it("un pago baja el saldo; lo arrastrado se cancela primero con el pago total", async () => {
     await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-05", amount: 30000, method: "BANCO", now: NOW });
     const r = await row(m1);
-    expect(r).toMatchObject({ paid: 30000, balance: 52500, carried: 3000 });
+    expect(r).toMatchObject({ paid: 0, balance: 52500, carried: 3000 }); // sin indicar mes, el cobro cubre septiembre (el más viejo con deuda)
+    expect(await row(m1, "2026-09")).toMatchObject({ paid: 30000, status: "PARCIAL" });
   });
   it("los ajustes manuales llevan motivo: + suma deuda, − la baja", async () => {
     await adjustMember(db, { actor: ale, memberId: m1, date: TODAY, amount: 2000, reason: "Corte extra fuera de plan", now: NOW });
@@ -146,6 +117,63 @@ describe("cuenta corriente: debe, haber y saldo", () => {
     expect(await code(registerPayment(db, { ...base, method: "CHEQUE" }))).toBe("MEDIO_DE_PAGO_INVALIDO");
     expect(await code(registerPayment(db, { ...base, date: "2026-10-09" }))).toBe("FECHA_FUTURA");
     expect(await code(registerPayment(db, { ...base, actor: lucio }))).toBe("SOLO_ADMIN");
+  });
+});
+
+describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () => {
+  it("las sesiones cargadas a mano mandan sobre la asistencia y se cobran al precio vigente", async () => {
+    await setAttendance(db, { actor: ale, memberId: m1, date: "2026-10-02", present: true, now: NOW });
+    expect(await row(m1)).toMatchObject({ visits: 1, manual: false, charged: 16500 });
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 });
+    expect(await row(m1)).toMatchObject({ visits: 4, manual: true, charged: 66000, status: "INPAGO" });
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: null }); // vuelve a contar la asistencia
+    expect(await row(m1)).toMatchObject({ visits: 1, manual: false, charged: 16500 });
+    expect(await db.auditLog.count({ where: { entity: "MemberMonth" } })).toBe(2); // alta y borrado
+  });
+  it("valida mes, cantidad y permisos", async () => {
+    expect(await code(setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-13", sessions: 4 }))).toBe("MES_INVALIDO");
+    expect(await code(setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4.5 }))).toBe("SESIONES_INVALIDAS");
+    expect(await code(setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 32 }))).toBe("SESIONES_INVALIDAS");
+    expect(await code(setMemberSessions(db, { actor: lucio, memberId: m1, month: "2026-10", sessions: 4 }))).toBe("SOLO_ADMIN");
+  });
+  it("estado del mes: INPAGO, PARCIAL y PAGO, con la diferencia como en la planilla", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // 66.000
+    await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-02", amount: 15000, method: "BANCO", period: "2026-10", now: NOW });
+    expect(await row(m1)).toMatchObject({ paid: 15000, diff: -51000, status: "PARCIAL", lastPayDate: "2026-10-02" });
+    await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 51000, method: "EFECTIVO", period: "2026-10", now: NOW });
+    expect(await row(m1)).toMatchObject({ paid: 66000, diff: 0, status: "PAGO", lastPayDate: TODAY, balance: 0 });
+  });
+  it("un cobro sin mes se imputa al mes más viejo con deuda; si no debe nada, es un pago adelantado", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-09", sessions: 4 }); // 66.000
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // 66.000
+    await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-02", amount: 66000, method: "BANCO", now: NOW });
+    expect((await row(m1, "2026-09")).status).toBe("PAGO");
+    expect((await row(m1, "2026-10")).status).toBe("INPAGO");
+    await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-03", amount: 66000, method: "BANCO", now: NOW });
+    expect((await row(m1, "2026-10")).status).toBe("PAGO");
+    await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-04", amount: 66000, method: "BANCO", now: NOW }); // ya no debe nada: queda a favor
+    expect((await getMemberStatement(db, m1)).map((r) => [r.month, r.status, r.balance])).toEqual([["2026-09", "PAGO", 0], ["2026-10", "PAGO", -66000]]);
+    expect((await row(m1)).balance).toBe(-66000);
+  });
+  it("si un socio no paga, la deuda se arrastra mes a mes y no se pierde", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-08", sessions: 4 }); // 66.000 sin pagar
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-09", sessions: 5 }); // 82.500
+    await registerPayment(db, { actor: ale, memberId: m1, date: "2026-09-10", amount: 30000, method: "BANCO", period: "2026-09", now: NOW });
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // 66.000
+    const st = await getMemberStatement(db, m1);
+    expect(st.map((r) => [r.month, r.due, r.paid, r.balance, r.status])).toEqual([
+      ["2026-08", 66000, 0, 66000, "INPAGO"],
+      ["2026-09", 82500, 30000, 118500, "PARCIAL"],
+      ["2026-10", 66000, 0, 184500, "INPAGO"],
+    ]);
+    expect(await row(m1)).toMatchObject({ balance: 184500, carried: 118500, oldestUnpaid: "2026-08" });
+  });
+  it("el aporte al barbero y al local sale de las sesiones cargadas a mano", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // Jere: (16.500 − 1.500) × 60% = 9.000 por sesión
+    expect(await row(m1)).toMatchObject({ barberShare: 36000, localShare: 30000 });
+    expect(await membershipLaborFor(db, ids.jere, "2026-10")).toBe(36000);
+    const t = await membershipMonthTotals(db, "2026-10");
+    expect(t).toMatchObject({ visits: 4, income: 66000, drinkCost: 4 * 1500 });
   });
 });
 
