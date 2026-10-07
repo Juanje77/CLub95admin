@@ -9,7 +9,8 @@ import type { ServiceType } from "../domain/types";
 import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
-import { DomainError } from "../services/common";
+import { DomainError, isAdmin } from "../services/common";
+import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
 import { addMemberPrice, adjustMember, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
@@ -307,5 +308,44 @@ export async function voidMemberEntry(p: { id: string; reason: string }) {
   return run(async (actor) => {
     await voidLedgerEntry(db, { actor, ...p });
     return "Movimiento anulado.";
+  });
+}
+
+// --- Importar los socios desde la planilla de Excel ----------------------------------------------------------------------------
+
+async function readSociosForm(form: FormData) {
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new DomainError("ARCHIVO_FALTANTE", "Elegí el archivo de Excel (.xlsx) de la planilla.");
+  if (file.size > 5_000_000) throw new DomainError("ARCHIVO_GRANDE", "El archivo es demasiado grande (máximo 5 MB).");
+  let wb;
+  try {
+    wb = await readSociosWorkbook(Buffer.from(await file.arrayBuffer()));
+  } catch {
+    throw new DomainError("ARCHIVO_INVALIDO", "No se pudo leer el archivo. Tiene que ser un Excel (.xlsx).");
+  }
+  const sheets = sociosSheets(wb);
+  if (sheets.length === 0) throw new DomainError("SIN_HOJAS", "No encontré hojas de socios (con las columnas NOMBRE y SESIONES) en ese archivo.");
+  const wanted = String(form.get("sheet") ?? "");
+  const pick = sheets.find((x) => x.name === wanted) ?? sheets[sheets.length - 1]!;
+  const parsed = parseSociosSheet(wb.getWorksheet(pick.name)!, pick.month);
+  return { sheets, parsed };
+}
+
+/** Vista previa: no guarda nada. */
+export async function previewSocios(form: FormData) {
+  return run(async (actor) => {
+    if (!isAdmin(actor)) throw new DomainError("SOLO_ADMIN", "Solo el admin o el dueño pueden importar socios.");
+    const { sheets, parsed } = await readSociosForm(form);
+    return { data: { sheets, plan: await planSociosImport(db, parsed) } };
+  });
+}
+
+export async function importSocios(form: FormData) {
+  return run(async (actor) => {
+    if (!isAdmin(actor)) throw new DomainError("SOLO_ADMIN", "Solo el admin o el dueño pueden importar socios.");
+    const { parsed } = await readSociosForm(form);
+    const plan = await planSociosImport(db, parsed);
+    const r = await applySociosImport(db, actor, plan);
+    return { message: `Listo: ${r.created} socio${r.created === 1 ? "" : "s"} nuevo${r.created === 1 ? "" : "s"}, ${r.sessionsSet} mes${r.sessionsSet === 1 ? "" : "es"} con sesiones y ${r.payments} cobro${r.payments === 1 ? "" : "s"} cargado${r.payments === 1 ? "" : "s"}.`, data: { result: r, month: plan.month } };
   });
 }

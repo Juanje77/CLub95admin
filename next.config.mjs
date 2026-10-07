@@ -2,6 +2,7 @@
 const nextConfig = {
   serverExternalPackages: ["@prisma/client", "exceljs"],
   poweredByHeader: false,
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   async headers() {
     return [
       {

@@ -78,6 +78,16 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 - El **barbero** cobra (precio − bebida) × su comisión por cada sesión que atendió, haya pagado o no el socio: si un socio no paga, el local es quien carga con esa deuda y la sigue reclamando en la cuenta corriente.
 - Si la asistencia tildada no coincide con los "socios" cargados en la planilla del día, aparece una nota de diferencias (no se corrige sola).
 
+### Cargar los socios desde el Excel
+
+**Socios → "Cargar los socios desde la planilla de Excel"** (solo admin/dueño). Se sube `Club95_v3.xlsx`, se elige la hoja del mes y se ve una **vista previa antes de guardar**:
+
+- Se crean los socios que faltan (plan, tipo, barbero, precio propio si la fila lo trae distinto del plan).
+- Las **sesiones** y el **cobro** de cada fila van al mes que dice *MES QUE CORRESPONDE* (mes anterior / actual / siguiente de la hoja). Quien no pagó queda debiendo en la cuenta corriente.
+- Los cobros se registran como transferencia/banco (la planilla no dice el medio). Si el cobro no tiene fecha, se usa el primer día del mes de la hoja. Si el día de un cobro ya está cerrado en la caja, **ese cobro no se carga** (para no mover un cierre): se avisa.
+- Se avisa y **no se carga** lo que no se puede: filas sin plan o sin tipo, filas con datos pero sin nombre, nombres repetidos. Si el barbero de la planilla no está cargado en el equipo (por ejemplo Beni o Betún), el socio queda **sin asignar**.
+- Se puede repetir sin duplicar socios ni cobros. Solo se lee la hoja elegida: lo que se debía de meses anteriores no se carga si no está en ella.
+
 ## Gastos
 
 - **Lista cerrada de conceptos** administrable (reemplaza al control "MAL CARGADO EL CONCEPTO"), con categoría: variable, estructura, inversión o reposición.

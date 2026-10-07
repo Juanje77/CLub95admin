@@ -283,6 +283,42 @@ await page.waitForFunction(() => /92\.000/.test(document.querySelector("table.cu
 check(true, "plan Gold corte y barba: 4 sesiones × $ 23.000 = $ 92.000");
 await shot("socios-cuenta");
 
+// 9d. Cargar socios desde una planilla de Excel (vista previa, carga y repetición sin duplicar)
+const { default: ExcelJS } = await import("exceljs");
+const impWb = new ExcelJS.Workbook();
+const impWs = impWb.addWorksheet("OCTUBRE 2026");
+impWs.addRow(["CLUB 95"]); impWs.addRow([]); impWs.addRow([]);
+impWs.addRow(["#", "NOMBRE", "PLAN", "TIPO", "BARBERO", "SESIONES", "PRECIO/SES", "TOTAL MES $", "COBRADO $", "FECHA PAGO", "MES QUE CORRESPONDE"]);
+impWs.addRow([1, "Importado Uno", "BLACK", "CORTE", "JERE", 4, 16250, 65000, null, null, "MES ACTUAL"]);
+impWs.addRow([2, "Importado Dos", "GOLD", "CORTE Y BARBA", "JERE", 5, 23000, 115000, null, null, "MES ACTUAL"]);
+impWs.addRow([3, "Sin Plan", null, null, "JERE", 4, null, null, null, null, "MES ACTUAL"]);
+impWs.addRow(["TOTALES DEL MES"]);
+const xlsxPath = join(tmpdir(), "socios-prueba.xlsx");
+await impWb.xlsx.writeFile(xlsxPath);
+await page.getByRole("link", { name: "Cargar los socios desde la planilla de Excel" }).click();
+await page.getByRole("heading", { name: "Cargar socios desde Excel" }).waitFor();
+await page.locator('input[type="file"]').setInputFiles(xlsxPath);
+await page.getByRole("button", { name: "Leer la planilla" }).click();
+await page.getByRole("heading", { name: "Qué se va a cargar" }).waitFor();
+const preview = await page.locator("body").innerText();
+check(/Socios nuevos\s*2/.test(preview) && /Sesiones\s*9/.test(preview), "la vista previa cuenta 2 socios nuevos y 9 sesiones");
+check(/Sin Plan/.test(preview) && /falta el plan/.test(preview), "la fila sin plan ni tipo se avisa y no se carga");
+check((await page.getByRole("link", { name: "Importado Uno" }).count()) === 0, "la vista previa no guardó nada todavía");
+await page.getByRole("button", { name: /Cargar 2 socios/ }).click();
+await page.getByText(/Listo: 2 socios nuevos/).first().waitFor();
+check(true, "se cargan los socios nuevos con sus sesiones");
+await page.getByRole("link", { name: "Ver los socios" }).click();
+await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+const impRow = page.locator("table.cuenta tr", { hasText: "Importado Dos" });
+await impRow.waitFor();
+check(/115\.000/.test(await impRow.innerText()), "Gold corte y barba: 5 sesiones × $ 23.000 = $ 115.000 en la planilla mensual");
+await page.getByRole("link", { name: "Cargar los socios desde la planilla de Excel" }).click();
+await page.locator('input[type="file"]').setInputFiles(xlsxPath);
+await page.getByRole("button", { name: "Leer la planilla" }).click();
+await page.getByRole("heading", { name: "Qué se va a cargar" }).waitFor();
+check(/Socios nuevos\s*0/.test(await page.locator("body").innerText()), "repetir la carga no duplica socios");
+await page.getByRole("link", { name: "Volver a Socios" }).click();
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();

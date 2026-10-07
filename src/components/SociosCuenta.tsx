@@ -159,6 +159,7 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
 
       {selected && <MemberPanel key={selected.id} m={selected} ledger={ledger} statement={statement} barbers={barbers} today={today} />}
       <NewMemberForm barbers={barbers} prices={prices} />
+      <p style={{ marginTop: 12 }}><Link href="/socios/importar">Cargar los socios desde la planilla de Excel →</Link></p>
     </>
   );
 }
