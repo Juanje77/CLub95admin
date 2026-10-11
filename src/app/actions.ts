@@ -10,6 +10,7 @@ import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError, isAdmin } from "../services/common";
+import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
 import { addMemberPrice, adjustMember, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
@@ -347,5 +348,21 @@ export async function importSocios(form: FormData) {
     const plan = await planSociosImport(db, parsed);
     const r = await applySociosImport(db, actor, plan);
     return { message: `Listo: ${r.created} socio${r.created === 1 ? "" : "s"} nuevo${r.created === 1 ? "" : "s"}, ${r.sessionsSet} mes${r.sessionsSet === 1 ? "" : "es"} con sesiones y ${r.payments} cobro${r.payments === 1 ? "" : "s"} cargado${r.payments === 1 ? "" : "s"}.`, data: { result: r, month: plan.month } };
+  });
+}
+
+// --- Cuentas de socios: efectivo a rendir, bebida y ganancia -------------------------------------------------------------------
+
+export async function saveFundEntry(p: { fund: string; kind: string; amount: number; date: string; note: string }) {
+  return run(async (actor) => {
+    await addFundEntry(db, { actor, ...p, amount: Number(p.amount) });
+    return "Movimiento registrado.";
+  });
+}
+
+export async function voidFundEntryAction(p: { id: string; reason: string }) {
+  return run(async (actor) => {
+    await voidFundEntry(db, { actor, ...p });
+    return "Movimiento anulado.";
   });
 }

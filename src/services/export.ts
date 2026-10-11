@@ -148,7 +148,6 @@ export async function buildPlanillaWorkbook(grid: MonthGrid): Promise<Buffer> {
   add("TOTAL INGRESOS", (d) => d.result.income, { bold: true });
   add("Mano de obra", (d) => d.result.labor);
   add("Dinero que debe haber", (d) => d.result.expectedNet, { bold: true });
-  add("Cobros de socios", (d) => d.memberPayments);
   add("Costos (bebidas, ceras)", (d) => d.result.costs.total);
   add("GANANCIA DEL DÍA", (d) => d.result.profit.total, { bold: true });
   section("DINERO INGRESADO");

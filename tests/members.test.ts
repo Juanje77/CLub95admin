@@ -205,19 +205,19 @@ describe("aporte al barbero y al local", () => {
   });
 });
 
-describe("los cobros de socios entran a la caja del día", () => {
-  it("suman a lo que tiene que haber ese día (efectivo o banco)", async () => {
+describe("los socios se llevan aparte del día a día", () => {
+  it("sus cobros no suman a lo que tiene que haber en la caja del día", async () => {
     await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 15000, method: "EFECTIVO", now: NOW });
     await registerPayment(db, { actor: ale, memberId: m2, date: TODAY, amount: 10000, method: "BANCO", now: NOW });
     const f = await getDayFigures(db, TODAY);
-    expect(f).toMatchObject({ expectedIncome: 25000, expectedCash: 15000, expectedTransfers: 10000 });
+    expect(f).toMatchObject({ expectedIncome: 0, expectedCash: 0, expectedTransfers: 0 });
   });
-  it("la diferencia de caja de la planilla los incluye", async () => {
+  it("ni mueven la diferencia de caja de la planilla", async () => {
     await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 15000, method: "EFECTIVO", now: NOW });
     const grid = await getMonthGrid(db, "2026-10", NOW);
     const d = grid.days.find((x) => x.date === TODAY)!;
-    expect(d.memberPayments).toBe(15000);
     expect(d.difference).toBeNull(); // todavía no se cargó el dinero ingresado
+    expect(d.result.income).toBe(0);
   });
 });
 

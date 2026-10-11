@@ -8,7 +8,7 @@ import { useAction } from "./useAction";
 
 interface Preview { sheets: { name: string; month: string }[]; plan: ImportPlan }
 
-const PAY_TEXT: Record<string, string> = { NONE: "", NEW: "Se carga", DUPLICATE: "Ya estaba", DAY_CLOSED: "Día cerrado: no se carga" };
+const PAY_TEXT: Record<string, string> = { NONE: "", NEW: "Se carga", DUPLICATE: "Ya estaba" };
 
 export default function ImportSocios() {
   const [file, setFile] = useState<File | null>(null);
@@ -60,7 +60,7 @@ export default function ImportSocios() {
               <span>Cobros a cargar</span><b className="num">{p.totals.payments} · {formatARS(p.totals.paymentsAmount)}</b>
             </div>
             <p className="muted" style={{ margin: "8px 0" }}>
-              Solo se lee <b>esta hoja</b>: lo que se debía de meses anteriores no se carga si no está en ella. Los cobros se registran como transferencia / banco.
+              Solo se lee <b>esta hoja</b>: lo que se debía de meses anteriores no se carga si no está en ella. Los cobros se registran como transferencia / banco y <b>no tocan la caja del día</b> (los socios van aparte).
             </p>
             {p.skipped.length > 0 && (
               <div className="alert WARN" role="alert">

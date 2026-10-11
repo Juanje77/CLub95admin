@@ -403,6 +403,18 @@ export async function getMemberLedger(db: Db, memberId: string) {
   return db.memberLedger.findMany({ where: { memberId, deletedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] });
 }
 
+/** Todas las sesiones de socios de todos los meses, con la regla vigente del barbero que las atendió (para las cuentas de socios). */
+export async function allMemberLines(db: Db) {
+  const [{ data }, ruleRows] = await Promise.all([loadMembers(db), db.barberRule.findMany({ where: { deletedAt: null } })]);
+  const rulesBy = rulesByUser(ruleRows);
+  const out: (Line & { month: string; rule: BarberRule | undefined })[] = [];
+  for (const m of data.values()) {
+    const months = new Set<string>([...m.overrides.keys(), ...m.attendance.map((a) => a.date.slice(0, 7))]);
+    for (const month of months) for (const l of linesFor(m, month)) out.push({ ...l, month, rule: pickEffective(rulesBy.get(l.who) ?? [], l.date) });
+  }
+  return out;
+}
+
 /** Líneas a liquidar de todos los socios en un mes, con la regla vigente de cada barbero. */
 async function monthLines(db: Db, month: string) {
   const [{ data }, ruleRows] = await Promise.all([loadMembers(db), db.barberRule.findMany({ where: { deletedAt: null } })]);

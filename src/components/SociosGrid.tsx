@@ -327,11 +327,21 @@ export function MemberDrawer({ closeHref, children }: { closeHref: string; child
   );
 }
 
-export function ViewSwitch({ month, current }: { month: string; current: "cuenta" | "asistencia" }) {
+export type SociosView = "cuenta" | "asistencia" | "cajas";
+
+export function ViewSwitch({ month, current }: { month: string; current: SociosView }) {
+  const tabs: { id: SociosView; label: string; href: string }[] = [
+    { id: "cuenta", label: "Cuenta mensual", href: `/socios?mes=${month}` },
+    { id: "asistencia", label: "Asistencia", href: `/socios?mes=${month}&vista=asistencia` },
+    { id: "cajas", label: "Efectivo y cuentas", href: `/socios?mes=${month}&vista=cajas` },
+  ];
   return (
     <nav className="seg" aria-label="Vista de socios" style={{ margin: "6px 0" }}>
-      <Link href={`/socios?mes=${month}`} aria-current={current === "cuenta" ? "page" : undefined} style={{ textAlign: "center", padding: "14px 8px", fontWeight: 600, textDecoration: "none", color: current === "cuenta" ? "var(--bg)" : "var(--ink)", background: current === "cuenta" ? "var(--brand)" : "transparent" }}>Cuenta mensual</Link>
-      <Link href={`/socios?mes=${month}&vista=asistencia`} aria-current={current === "asistencia" ? "page" : undefined} style={{ textAlign: "center", padding: "14px 8px", fontWeight: 600, textDecoration: "none", color: current === "asistencia" ? "var(--bg)" : "var(--ink)", background: current === "asistencia" ? "var(--brand)" : "transparent" }}>Asistencia por día</Link>
+      {tabs.map((t) => (
+        <Link key={t.id} href={t.href} aria-current={current === t.id ? "page" : undefined} style={{ textAlign: "center", padding: "14px 4px", fontWeight: 600, fontSize: ".92rem", textDecoration: "none", color: current === t.id ? "var(--bg)" : "var(--ink)", background: current === t.id ? "var(--brand)" : "transparent" }}>
+          {t.label}
+        </Link>
+      ))}
     </nav>
   );
 }

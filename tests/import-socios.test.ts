@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import type { PrismaClient } from "@prisma/client";
 import { applySociosImport, monthFromSheetName, norm, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../src/import/socios";
+import { getDayFigures } from "../src/services/figures";
 import { getMembersMonth, getMemberStatement } from "../src/services/members";
 import type { Actor } from "../src/services/common";
 import { freshDb, seed, type Seed } from "./helpers/db";
@@ -116,13 +117,10 @@ describe("vista previa y carga", () => {
     expect(st).toHaveLength(1);
   });
 
-  it("no toca un día que ya está cerrado en la caja", async () => {
-    await db.cashClose.create({ data: { date: "2026-10-01", expectedIncome: 0, labor: 0, expectedNet: 0, declaredTotal: 0, difference: 0, status: "CLOSED" } });
-    const plan = await planSociosImport(db, await parse(rows), NOW);
-    expect(plan.rows.find((r) => r.name === "MATIAS ARRUE")).toMatchObject({ payAction: "DAY_CLOSED" });
-    const res = await applySociosImport(db, ale, plan, NOW);
-    expect(res).toMatchObject({ payments: 1, skippedPayments: 1 });
-    expect(await db.memberLedger.count({ where: { date: "2026-10-01" } })).toBe(0);
+  it("los cobros importados no tocan la caja del día (los socios van aparte)", async () => {
+    await applySociosImport(db, ale, await planSociosImport(db, await parse(rows), NOW), NOW);
+    expect(await getDayFigures(db, "2026-10-01")).toMatchObject({ expectedIncome: 0, expectedTransfers: 0 });
+    expect((await getMembersMonth(db, "2026-09", NOW)).members.find((m) => m.name === "MATIAS ARRUE")).toMatchObject({ paid: 70000 });
   });
 
   it("un cobro sin fecha se registra el primer día del mes de la hoja (nunca en el futuro)", async () => {

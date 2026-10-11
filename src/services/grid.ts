@@ -180,9 +180,7 @@ export interface GridDayCol {
   changeLeft: number;
   note: string | null;
   result: GridDayResult;
-  /** Cobros de cuotas de socios registrados ese día (entran a la caja, no son ventas de la grilla). */
-  memberPayments: number;
-  /** Total ingresado − (ingresos del día + cobros de socios). null si todavía no se cargó nada de dinero. */
+  /** Total ingresado − ingresos del día. null si todavía no se cargó nada de dinero. */
   difference: number | null;
   totalDeclared: number;
   error?: string;
@@ -206,14 +204,13 @@ export function monthDates(month: string): string[] {
 export async function getMonthGrid(db: PrismaClient, month: string, now: Date = new Date()): Promise<MonthGrid> {
   const dates = monthDates(month);
   const range = { gte: dates[0]!, lte: dates[dates.length - 1]! };
-  const [users, sales, closes, products, accounts, pricing, memberPays] = await Promise.all([
+  const [users, sales, closes, products, accounts, pricing] = await Promise.all([
     db.user.findMany({ where: { isBarber: true, deletedAt: null }, orderBy: { createdAt: "asc" } }),
     db.sale.findMany({ where: { deletedAt: null, date: range } }),
     db.cashClose.findMany({ where: { deletedAt: null, date: range }, include: { lines: true } }),
     db.product.findMany({ where: { deletedAt: null }, include: { prices: true }, orderBy: [{ kind: "asc" }, { name: "asc" }] }),
     db.paymentAccount.findMany({ where: { active: true, deletedAt: null, key: { not: { startsWith: "MEMBRESIA" } } }, orderBy: { name: "asc" } }),
     loadPricing(db),
-    db.memberLedger.findMany({ where: { deletedAt: null, kind: "PAGO", date: range } }),
   ]);
 
   // Filas: barberos activos y los inactivos que tuvieron actividad en el mes (p. ej. Beni en septiembre).
@@ -263,7 +260,6 @@ export async function getMonthGrid(db: PrismaClient, month: string, now: Date = 
         error = e instanceof Error ? e.message : "No se pudo calcular el día.";
       }
     }
-    const memberPayments = memberPays.filter((l) => l.date === date).reduce((a, l) => a + l.credit, 0);
     const hasMoney = !!close && (totalDeclared > 0 || close.changeLeft > 0);
     return {
       date,
@@ -275,8 +271,7 @@ export async function getMonthGrid(db: PrismaClient, month: string, now: Date = 
       changeLeft: close?.changeLeft ?? 0,
       note: close?.note ?? null,
       result,
-      memberPayments,
-      difference: hasMoney ? totalDeclared - (result.income + memberPayments) : null,
+      difference: hasMoney ? totalDeclared - result.income : null,
       totalDeclared,
       error,
     };

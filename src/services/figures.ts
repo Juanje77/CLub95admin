@@ -57,13 +57,7 @@ export async function getDayFigures(db: Db, date: string): Promise<DayFigures> {
     }
   }
 
-  // Los cobros de socios (membresías) registrados ese día entran a la caja del día.
-  const memberPayments = await db.memberLedger.findMany({ where: { date, kind: "PAGO", deletedAt: null } });
-  for (const mp of memberPayments) {
-    expectedIncome += mp.credit;
-    if (mp.method === "EFECTIVO") cash += mp.credit;
-    else transfers += mp.credit;
-  }
+  // Los socios se llevan aparte del día a día: sus cobros no suman a la caja del día (van al panel "Efectivo y cuentas" de Socios).
 
   let labor = 0;
   if (byBarber.size > 0) {

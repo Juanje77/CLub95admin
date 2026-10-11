@@ -136,15 +136,13 @@ export interface ImportPlan {
 
 export async function planSociosImport(db: PrismaClient, parsed: ParsedSocios, now: Date = new Date()): Promise<ImportPlan> {
   const today = todayBA(now);
-  const [members, users, payments, closes] = await Promise.all([
+  const [members, users, payments] = await Promise.all([
     db.member.findMany({ where: { deletedAt: null } }),
     db.user.findMany({ where: { isBarber: true, active: true, deletedAt: null } }),
     db.memberLedger.findMany({ where: { deletedAt: null, kind: "PAGO" } }),
-    db.cashClose.findMany({ where: { status: "CLOSED" }, select: { date: true } }),
   ]);
   const byName = new Map(members.map((m) => [norm(m.name), m]));
   const barbers = new Map(users.map((u) => [norm(u.name), u.id]));
-  const closed = new Set(closes.map((c) => c.date));
   const rows: ImportRow[] = [];
   const seen = new Set<string>();
   for (const r of parsed.rows) {
@@ -175,10 +173,7 @@ export async function planSociosImport(db: PrismaClient, parsed: ParsedSocios, n
       }
       const dup = existing && payments.some((p) => p.memberId === existing.id && p.date === payDateUsed && p.credit === r.paid && p.period === r.serviceMonth);
       if (dup) payAction = "DUPLICATE";
-      else if (closed.has(payDateUsed)) {
-        payAction = "DAY_CLOSED";
-        warnings.push("el día de ese cobro ya está cerrado en la caja: no se carga (cargalo a mano o reabrí el día)");
-      } else payAction = "NEW";
+      else payAction = "NEW";
     }
     rows.push({ ...r, exists: !!existing, barberId, priceToSet, payDateUsed, payAction, warnings });
   }

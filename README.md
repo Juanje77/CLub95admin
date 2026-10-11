@@ -49,7 +49,7 @@ Moneda ARS sin decimales (`$ 12.500`), fechas `dd/mm/aaaa`, zona horaria `Americ
 - **Mano de obra** de cada barbero = (precio − bebida) × su comisión, por servicio.
 - **Dinero que debe haber** = ingresos − mano de obra.
 - **Ganancia del día** = parte del local en los servicios + margen de la bebida incluida + margen de las bebidas sueltas + margen de ceras/polvo/aceite. Las membresías se liquidan aparte.
-- **Diferencia de caja** = dinero ingresado − (ingresos + cobros de socios del día). El cambio dejado **no** es ingreso.
+- **Diferencia de caja** = dinero ingresado − ingresos del día. El cambio dejado **no** es ingreso. **Los socios se llevan aparte del día a día:** sus cobros no suman a la caja del día (ver [Efectivo y cuentas de socios](#efectivo-y-cuentas-de-socios)).
 
 ### Cómo se calcula el mes (Panel)
 
@@ -73,10 +73,24 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 - **Sesiones del mes:** se escribe el número en la tabla (como la columna SESIONES). Si no se escribe, se cuentan las asistencias tildadas en la vista *Asistencia por día*. Vaciar el campo vuelve a contar la asistencia.
 - Por fila: **total** (sesiones × precio), **cobrado**, **diferencia** (cobrado − total), **estado** (Pagó / Parcial / Impago), fecha del último pago y saldo.
 - **Cuenta corriente** (si un socio no paga): lo que no se paga **se arrastra de un mes al siguiente** y queda a la vista en "quién debe" (con desde qué mes) y, por socio, en una tabla mes a mes con saldo acumulado.
-- **Cobros:** llevan medio (efectivo / banco) y entran a la caja del día en que se cobran. El campo **Corresponde a** (la columna MES QUE CORRESPONDE) indica el mes de servicio que cubre: mes anterior, actual o siguiente; si se deja en automático, cubre el mes **más viejo que debe** (y si no debe nada, queda como pago adelantado).
+- **Cobros:** llevan medio (efectivo / banco) y **no entran a la caja del día**: van al panel *Efectivo y cuentas* de Socios. El campo **Corresponde a** (la columna MES QUE CORRESPONDE) indica el mes de servicio que cubre: mes anterior, actual o siguiente; si se deja en automático, cubre el mes **más viejo que debe** (y si no debe nada, queda como pago adelantado).
 - Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).
 - El **barbero** cobra (precio − bebida) × su comisión por cada sesión que atendió, haya pagado o no el socio: si un socio no paga, el local es quien carga con esa deuda y la sigue reclamando en la cuenta corriente.
 - Si la asistencia tildada no coincide con los "socios" cargados en la planilla del día, aparece una nota de diferencias (no se corrige sola).
+
+### Efectivo y cuentas de socios
+
+**Socios → Efectivo y cuentas** (solo admin/dueño). Tres cuentas que se acumulan desde el primer dato y se llevan aparte de la caja diaria:
+
+| Cuenta | Cómo se calcula |
+|---|---|
+| **Efectivo a rendir** | efectivo cobrado a socios − **cortes de Ale** (la parte que Ale se queda por sus sesiones, que cobra el 100 % de lo que queda tras la bebida) − rendiciones registradas |
+| **Cuenta de bebida** | bebida descontada en cada sesión de socio: **Lucio y Ale $ 3.000, Jere $ 1.500** (según la regla de cada barbero) − compras de bebida registradas |
+| **Ganancia de Lucio** | lo que queda para el local de las sesiones de Lucio, sin la bebida ni su parte (con 60 %: en una sesión de $ 20.000 son $ 6.800) − retiros registrados |
+
+- Las cuentas se calculan solas de las sesiones y los cobros; lo que se carga a mano son los movimientos: **rendición**, **compra de bebida**, **retiro de ganancia** y **ajuste** (con motivo; sirve para el saldo inicial). Los movimientos se anulan con motivo, no se borran.
+- Se cuentan las sesiones de socios (no los cortes sueltos de la planilla diaria) y se devengan por mes de servicio; el efectivo, por fecha de cobro. Los cobros importados desde el Excel se registran como transferencia, así que no suman al efectivo: si alguno fue en efectivo, corregilo desde la ficha del socio.
+- La cuenta de ganancia es de Lucio por defecto; se puede cambiar el barbero con `Setting` `memberFunds` (`{"profitBarbers":["Lucio"]}`).
 
 ### Cargar los socios desde el Excel
 

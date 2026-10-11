@@ -336,6 +336,21 @@ model MemberMonth {
   @@unique([memberId, month])
 }
 
+// Movimientos manuales de las cuentas de socios: rendición del efectivo, gasto de bebida, retiro de ganancia y ajustes (con signo).
+model MemberFundEntry {
+  id          String    @id @default(cuid())
+  fund        String // EFECTIVO | BEBIDA | GANANCIA
+  date        String
+  kind        String // RENDICION | GASTO | RETIRO | AJUSTE
+  amount      Int // con signo: negativo baja el saldo
+  note        String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([fund, date])
+}
+
 model MemberLedger {
   id        String    @id @default(cuid())
   memberId  String

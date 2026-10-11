@@ -147,7 +147,7 @@ await memberForm.getByLabel("Barbero asignado").selectOption({ label: "Jere" });
 await memberForm.getByLabel(/Precio por sesión/).fill("16500");
 await memberForm.getByRole("button", { name: "Agregar socio" }).click();
 await page.getByText("Socio agregado.").waitFor();
-await page.getByRole("link", { name: "Asistencia por día" }).click();
+await page.getByRole("link", { name: "Asistencia", exact: true }).click();
 await page.waitForFunction(() => !!document.querySelector("table.grid .att, table.grid button.att"));
 const att = (date) => page.locator(`button[data-att="Matías Arrue|${date}"]`);
 await att(TODAY).click();
@@ -321,6 +321,25 @@ await page.getByRole("button", { name: "Leer la planilla" }).click();
 await page.getByRole("heading", { name: "Qué se va a cargar" }).waitFor();
 check(/Socios nuevos\s*0/.test(await page.locator("body").innerText()), "repetir la carga no duplica socios");
 await page.getByRole("link", { name: "Volver a Socios" }).click();
+
+// 9e. Efectivo y cuentas de socios: efectivo a rendir, bebida y ganancia (aparte del día a día)
+await page.getByRole("link", { name: "Efectivo y cuentas" }).click();
+await page.getByRole("region", { name: "Efectivo a rendir" }).waitFor();
+const bebida = page.getByRole("region", { name: "Cuenta de bebida" });
+check(/22\.500/.test(await bebida.innerText()), "la cuenta de bebida junta $ 1.500 por cada sesión de Jere (15 sesiones = $ 22.500)");
+await bebida.locator("summary", { hasText: "Ajuste manual" }).click();
+await bebida.getByLabel("Monto ($; con − para restar)").fill("10000");
+await bebida.getByLabel(/Motivo \(obligatorio\)/).fill("Saldo inicial");
+await bebida.getByRole("button", { name: "Guardar ajuste" }).click();
+await bebida.getByText("32.500").first().waitFor();
+check(true, "un ajuste con motivo (saldo inicial) suma a la cuenta de bebida: $ 32.500");
+await bebida.locator("summary", { hasText: "Registrar una compra de bebida" }).click();
+await bebida.getByLabel("Monto ($)", { exact: true }).fill("2500");
+await bebida.getByRole("button", { name: "Registrar una compra de bebida" }).click();
+await bebida.getByText("30.000").first().waitFor();
+check(true, "una compra de bebida baja la cuenta: $ 30.000");
+check(/Ganancia de Lucio/.test(await page.locator("body").innerText()), "hay una cuenta de ganancia de Lucio");
+await shot("socios-cuentas");
 
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más", exact: true }).click();

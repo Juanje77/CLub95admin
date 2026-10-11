@@ -37,6 +37,7 @@ export default function DayPanel({ day, grid, viewer, barberName }: { day: GridD
         <span>Diferencia de caja</span>
         <b className={`num ${day.difference === null ? "" : day.difference === 0 ? "okc" : "errc"}`}>{day.difference === null ? "sin cargar" : formatARS(day.difference)}</b>
       </div>
+      <p className="muted" style={{ margin: "6px 0 0" }}>Diferencia = dinero ingresado − total ingresos. Los cobros de socios no entran acá: se llevan aparte en Socios.</p>
 
       {r.barbers.length > 0 && (
         <details style={{ marginTop: 8 }}>
