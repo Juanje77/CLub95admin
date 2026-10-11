@@ -95,7 +95,7 @@ describe("vista previa y carga", () => {
     expect(res).toMatchObject({ created: 4, sessionsSet: 3, payments: 2 });
     const sep = (await getMembersMonth(db, "2026-09", NOW)).members;
     expect(sep.find((m) => m.name === "MATIAS ARRUE")).toMatchObject({ visits: 4, charged: 70000, paid: 70000, status: "PAGO", balance: 0 });
-    expect(sep.find((m) => m.name === "TIAGO BENVENUTO")).toMatchObject({ visits: 4, charged: 65000, paid: 0, status: "INPAGO", balance: 65000, oldestUnpaid: "2026-09" });
+    expect(sep.find((m) => m.name === "TIAGO BENVENUTO")).toMatchObject({ visits: 4, charged: 65000, paid: 0, status: "PENDIENTE", balance: 65000, oldestUnpaid: "2026-09" }); // septiembre vence el 10/10
     const nov = (await getMembersMonth(db, "2026-11", NOW)).members.find((m) => m.name === "GUSTAVO")!;
     expect(nov).toMatchObject({ price: 13750, visits: 4, charged: 55000, paid: 55000, status: "PAGO" }); // pago adelantado con precio propio
     const pedro = await db.member.findFirstOrThrow({ where: { name: "PEDRO BERON" } });

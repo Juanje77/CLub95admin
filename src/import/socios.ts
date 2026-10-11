@@ -57,6 +57,8 @@ export interface SocioRow {
   payDate: string | null;
   /** Mes de servicio al que corresponden las sesiones y el cobro. */
   serviceMonth: string;
+  /** Cuándo suele pagar, deducido de la hoja: cobros de los últimos días del mes = fin de mes; el resto, principio de mes. */
+  payTiming: "INICIO" | "FIN";
 }
 export interface ParsedSocios {
   sheet: string;
@@ -103,6 +105,7 @@ export function parseSociosSheet(ws: ExcelJS.Worksheet, month: string): ParsedSo
       paid,
       payDate: dateRaw instanceof Date ? isoDate(dateRaw) : typeof dateRaw === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : null,
       serviceMonth: shiftMonth(month, offset),
+      payTiming: offset === 0 && dateRaw instanceof Date && Number(isoDate(dateRaw).slice(8, 10)) >= 20 ? "FIN" : "INICIO",
     });
   }
   return out;
@@ -202,7 +205,7 @@ export async function applySociosImport(db: PrismaClient, actor: Actor, plan: Im
     let member = (await db.member.findMany({ where: { deletedAt: null } })).find((m) => norm(m.name) === norm(r.name)) ?? null;
     if (!member) {
       const created = await createMember(db, {
-        actor, name: r.name, plan: r.plan, serviceType: r.serviceType, userId: r.barberId,
+        actor, name: r.name, plan: r.plan, serviceType: r.serviceType, userId: r.barberId, payTiming: r.payTiming,
         price: r.priceToSet ?? undefined, startDate: `${r.serviceMonth}-01`, note: `Cargado desde la planilla ${plan.sheet}`, now,
       });
       member = created;

@@ -299,6 +299,7 @@ model Member {
   startDate   String?
   note        String?
   serviceType String // CORTE | CORTE_BARBA
+  payTiming   String    @default("INICIO") // INICIO: paga a principio de mes el mes que terminó · FIN: paga a fin de mes el mismo mes
   userId      String? // barbero asignado
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())

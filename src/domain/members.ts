@@ -10,13 +10,40 @@ export const DEFAULT_MEMBER_PRICES = {
   GOLD: { CORTE: 20000, CORTE_BARBA: 23000 },
 } as const;
 
-export type MonthStatus = "PAGO" | "PARCIAL" | "INPAGO" | "SIN_MOVIMIENTO";
+export const PAY_TIMINGS = ["INICIO", "FIN"] as const;
+/** INICIO: paga a principio de mes lo del mes que terminó. FIN: paga a fin de mes lo del mismo mes. */
+export type PayTiming = (typeof PAY_TIMINGS)[number];
 
-/** Estado de un mes de un socio: pagó todo, pagó una parte, no pagó nada, o no hubo movimiento. */
-export function monthStatus(due: number, paid: number): MonthStatus {
+const pad = (n: number) => String(n).padStart(2, "0");
+const nextMonth = (month: string) => {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
+};
+
+/** Último día en que el mes de servicio `month` todavía no se considera vencido, según cuándo suele pagar el socio. */
+export function dueDate(month: string, timing: PayTiming, debtDay: number): string {
+  return timing === "FIN" ? `${month}-31` : `${nextMonth(month)}-${pad(debtDay)}`;
+}
+
+/** Mes de servicio al que corresponde un cobro cuando no se indica: el más viejo con deuda; si no hay, según cuándo paga. */
+export function defaultPeriod(timing: PayTiming, payDate: string, oldestUnpaid: string | null, debtDay: number): string {
+  if (oldestUnpaid) return oldestUnpaid;
+  const month = payDate.slice(0, 7);
+  if (timing === "INICIO" && Number(payDate.slice(8, 10)) <= debtDay) {
+    const [y, m] = month.split("-").map(Number) as [number, number];
+    return m === 1 ? `${y - 1}-12` : `${y}-${pad(m - 1)}`;
+  }
+  return month;
+}
+
+export type MonthStatus = "PAGO" | "PARCIAL" | "INPAGO" | "PENDIENTE" | "SIN_MOVIMIENTO";
+
+/** Estado de un mes de un socio: pagó todo, pagó una parte, no pagó nada (todavía no vence: "por cobrar"), o no hubo movimiento. */
+export function monthStatus(due: number, paid: number, pending = false): MonthStatus {
   if (due <= 0 && paid <= 0) return "SIN_MOVIMIENTO";
   if (paid >= due) return "PAGO";
-  return paid > 0 ? "PARCIAL" : "INPAGO";
+  if (paid > 0) return "PARCIAL";
+  return pending ? "PENDIENTE" : "INPAGO";
 }
 
 export interface MonthEntry {
@@ -25,6 +52,8 @@ export interface MonthEntry {
   charge: number;
   adjust: number;
   paid: number;
+  /** El mes todavía no venció según cuándo suele pagar el socio. */
+  pending?: boolean;
 }
 export interface StatementRow extends MonthEntry {
   /** Lo que se debía ese mes: sesiones × precio + ajustes. */
@@ -44,7 +73,7 @@ export function buildStatement(entries: MonthEntry[]): StatementRow[] {
     .map((e) => {
       const due = e.charge + e.adjust;
       balance += due - e.paid;
-      return { ...e, due, diff: e.paid - due, balance, status: monthStatus(due, e.paid) };
+      return { ...e, due, diff: e.paid - due, balance, status: monthStatus(due, e.paid, e.pending) };
     });
 }
 

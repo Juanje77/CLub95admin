@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { buildStatement, carriedInto, DEFAULT_MEMBER_PRICES, daysSince, memberContribution, MEMBER_PLANS, oldestUnpaidMonth, type MemberPlan, type MonthEntry, type MonthStatus, type StatementRow } from "../domain/members";
+import { buildStatement, carriedInto, DEFAULT_MEMBER_PRICES, daysSince, defaultPeriod, dueDate, memberContribution, MEMBER_PLANS, oldestUnpaidMonth, PAY_TIMINGS, type MemberPlan, type PayTiming, type MonthEntry, type MonthStatus, type StatementRow } from "../domain/members";
 import { todayBA } from "../domain/money";
 import { pickEffective } from "../domain/rules";
 import type { BarberRule } from "../domain/types";
@@ -39,11 +39,22 @@ export async function defaultMemberPrice(db: Db, type: MemberType, plan: MemberP
   }
 }
 
+/** Día del mes desde el cual la deuda del mes anterior se considera vencida (la misma configuración que las alertas). */
+export async function memberDebtDay(db: Db): Promise<number> {
+  const row = await db.setting.findUnique({ where: { key: "alerts" } });
+  try {
+    const v = row ? (JSON.parse(row.value) as { memberDebtDay?: unknown }).memberDebtDay : undefined;
+    return typeof v === "number" && v >= 1 && v <= 28 ? v : 10;
+  } catch {
+    return 10;
+  }
+}
+
 // --- Socios ---------------------------------------------------------------------------------------------------------------
 
 export async function createMember(
   db: PrismaClient,
-  p: { actor: Actor; name: string; serviceType: string; userId: string | null; price?: number; plan?: string; phone?: string; startDate?: string; note?: string; now?: Date },
+  p: { actor: Actor; name: string; serviceType: string; userId: string | null; price?: number; plan?: string; payTiming?: string; phone?: string; startDate?: string; note?: string; now?: Date },
 ) {
   requireAdmin(p.actor);
   const name = p.name.trim();
@@ -56,13 +67,15 @@ export async function createMember(
     const b = await db.user.findUnique({ where: { id: p.userId } });
     if (!b || !b.isBarber) throw new DomainError("BARBERO_INVALIDO", "El barbero asignado no es válido.");
   }
+  const payTiming = p.payTiming ?? "INICIO";
+  if (!(PAY_TIMINGS as readonly string[]).includes(payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá si paga a principio o a fin de mes.");
   const plan = p.plan?.trim().toUpperCase() || "BLACK";
   if (!(MEMBER_PLANS as readonly string[]).includes(plan)) throw new DomainError("PLAN_INVALIDO", "El plan debe ser Black o Gold.");
   const price = p.price ?? (await defaultMemberPrice(db, p.serviceType as MemberType, plan as MemberPlan));
   checkMoney(price, "precio");
   return db.$transaction(async (tx) => {
     const m = await tx.member.create({
-      data: { name, plan, serviceType: p.serviceType, userId: p.userId, phone: p.phone?.trim() || null, startDate, note: p.note?.trim() || null },
+      data: { name, plan, payTiming, serviceType: p.serviceType, userId: p.userId, phone: p.phone?.trim() || null, startDate, note: p.note?.trim() || null },
     });
     await tx.memberPrice.create({ data: { memberId: m.id, validFrom: startDate, price } });
     await audit(tx, { userId: p.actor.id, entity: "Member", entityId: m.id, action: "CREATE", after: { name, plan, serviceType: p.serviceType, price, userId: p.userId } });
@@ -72,7 +85,7 @@ export async function createMember(
 
 export async function updateMember(
   db: PrismaClient,
-  p: { actor: Actor; id: string; name?: string; userId?: string | null; serviceType?: string; plan?: string; phone?: string; note?: string; active?: boolean },
+  p: { actor: Actor; id: string; name?: string; userId?: string | null; serviceType?: string; plan?: string; payTiming?: string; phone?: string; note?: string; active?: boolean },
 ) {
   requireAdmin(p.actor);
   const cur = await db.member.findUnique({ where: { id: p.id } });
@@ -80,11 +93,13 @@ export async function updateMember(
   if (p.name !== undefined && !p.name.trim()) throw new DomainError("NOMBRE_OBLIGATORIO", "Ingresá el nombre del socio.");
   if (p.serviceType !== undefined && !(MEMBER_TYPES as readonly string[]).includes(p.serviceType)) throw new DomainError("TIPO_INVALIDO", "El tipo debe ser corte o corte y barba.");
   if (p.plan !== undefined && !(MEMBER_PLANS as readonly string[]).includes(p.plan)) throw new DomainError("PLAN_INVALIDO", "El plan debe ser Black o Gold.");
+  if (p.payTiming !== undefined && !(PAY_TIMINGS as readonly string[]).includes(p.payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá si paga a principio o a fin de mes.");
   const row = await db.member.update({
     where: { id: p.id },
     data: {
       ...(p.name !== undefined ? { name: p.name.trim() } : {}),
       ...(p.plan !== undefined ? { plan: p.plan } : {}),
+      ...(p.payTiming !== undefined ? { payTiming: p.payTiming } : {}),
       ...(p.userId !== undefined ? { userId: p.userId } : {}),
       ...(p.serviceType !== undefined ? { serviceType: p.serviceType } : {}),
       ...(p.phone !== undefined ? { phone: p.phone.trim() || null } : {}),
@@ -176,7 +191,8 @@ export async function setMemberSessions(db: PrismaClient, p: { actor: Actor; mem
 
 /**
  * Cobro de un socio. `period` es el mes de servicio que cubre (la columna "MES QUE CORRESPONDE" de la planilla): si no se indica,
- * se imputa al mes más viejo que todavía tiene deuda y, si no debe nada, al mes del cobro (pago adelantado).
+ * se imputa al mes más viejo que todavía tiene deuda; si no debe nada, según cuándo suele pagar el socio (a principio de mes, los primeros días,
+ * paga el mes que terminó; a fin de mes paga el mismo mes).
  */
 export async function registerPayment(db: PrismaClient, p: { actor: Actor; memberId: string; date: string; amount: number; method: string; period?: string; note?: string; now?: Date }) {
   requireAdmin(p.actor);
@@ -184,8 +200,9 @@ export async function registerPayment(db: PrismaClient, p: { actor: Actor; membe
   checkMoney(p.amount);
   if (!(PAY_METHODS as readonly string[]).includes(p.method)) throw new DomainError("MEDIO_DE_PAGO_INVALIDO", "Elegí efectivo o banco/Mercado Pago.");
   if (p.period !== undefined && !MONTH_RE.test(p.period)) throw new DomainError("MES_INVALIDO", "El mes al que corresponde el cobro es inválido.");
-  if (!(await db.member.findUnique({ where: { id: p.memberId } }))) throw new DomainError("SOCIO_INEXISTENTE", "Ese socio no existe.");
-  const period = p.period ?? oldestUnpaidMonth(await getMemberStatement(db, p.memberId)) ?? p.date.slice(0, 7);
+  const member = await db.member.findUnique({ where: { id: p.memberId } });
+  if (!member) throw new DomainError("SOCIO_INEXISTENTE", "Ese socio no existe.");
+  const period = p.period ?? defaultPeriod(member.payTiming as PayTiming, p.date, oldestUnpaidMonth(await getMemberStatement(db, p.memberId, p.now)), await memberDebtDay(db));
   const row = await db.memberLedger.create({
     data: { memberId: p.memberId, date: p.date, period, kind: "PAGO", credit: p.amount, method: p.method, note: p.note?.trim() || null },
   });
@@ -223,6 +240,7 @@ export interface MemberRow {
   name: string;
   plan: string;
   serviceType: string;
+  payTiming: string;
   userId: string | null;
   barberName: string;
   active: boolean;
@@ -273,6 +291,7 @@ function priceFor(prices: { validFrom: string; price: number }[], date: string):
 interface MemberData {
   id: string;
   userId: string | null;
+  payTiming: PayTiming;
   prices: { validFrom: string; price: number }[];
   attendance: { date: string; userId: string | null }[];
   overrides: Map<string, number>;
@@ -290,7 +309,7 @@ function linesFor(m: MemberData, month: string): Line[] {
 }
 
 /** Cuenta corriente de un socio mes a mes: sesiones, cargos, ajustes y cobros (por mes de servicio). */
-function entriesOf(m: MemberData): MonthEntry[] {
+function entriesOf(m: MemberData, ctx: { today: string; debtDay: number }): MonthEntry[] {
   const months = new Set<string>([...m.overrides.keys(), ...m.attendance.map((a) => a.date.slice(0, 7)), ...m.ledger.map((l) => l.period)]);
   return [...months].map((month) => {
     const lines = linesFor(m, month);
@@ -300,6 +319,7 @@ function entriesOf(m: MemberData): MonthEntry[] {
       charge: lines.reduce((s, l) => s + l.price * l.qty, 0),
       adjust: m.ledger.filter((l) => l.kind === "AJUSTE" && l.period === month).reduce((s, l) => s + l.debit - l.credit, 0),
       paid: m.ledger.filter((l) => l.kind === "PAGO" && l.period === month).reduce((s, l) => s + l.credit, 0),
+      pending: ctx.today <= dueDate(month, m.payTiming, ctx.debtDay),
     };
   });
 }
@@ -322,6 +342,7 @@ async function loadMembers(db: Db, where: { id?: string } = {}) {
     data.set(m.id, {
       id: m.id,
       userId: m.userId,
+      payTiming: (PAY_TIMINGS as readonly string[]).includes(m.payTiming) ? (m.payTiming as PayTiming) : "INICIO",
       prices: m.prices,
       attendance: attendance.filter((a) => a.memberId === m.id),
       overrides: new Map(months.filter((x) => x.memberId === m.id).map((x) => [x.month, x.sessions])),
@@ -332,21 +353,21 @@ async function loadMembers(db: Db, where: { id?: string } = {}) {
 }
 
 /** Cuenta corriente de un socio: una fila por mes con sesiones, total, cobrado, diferencia, estado y saldo acumulado. */
-export async function getMemberStatement(db: Db, memberId: string): Promise<StatementRow[]> {
+export async function getMemberStatement(db: Db, memberId: string, now: Date = new Date()): Promise<StatementRow[]> {
   const { data } = await loadMembers(db, { id: memberId });
   const m = data.get(memberId);
-  return m ? buildStatement(entriesOf(m)) : [];
+  return m ? buildStatement(entriesOf(m, { today: todayBA(now), debtDay: await memberDebtDay(db) })) : [];
 }
 
 export async function getMembersMonth(db: Db, month: string, now: Date = new Date()): Promise<MembersMonth> {
   const today = todayBA(now);
-  const [{ members, data }, users, ruleRows] = await Promise.all([loadMembers(db), db.user.findMany({ where: { isBarber: true } }), db.barberRule.findMany({ where: { deletedAt: null } })]);
+  const [{ members, data }, users, ruleRows, debtDay] = await Promise.all([loadMembers(db), db.user.findMany({ where: { isBarber: true } }), db.barberRule.findMany({ where: { deletedAt: null } }), memberDebtDay(db)]);
   const rulesBy = rulesByUser(ruleRows);
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
 
   const rows: MemberRow[] = members.map((m) => {
     const d = data.get(m.id)!;
-    const statement = buildStatement(entriesOf(d));
+    const statement = buildStatement(entriesOf(d, { today, debtDay }));
     const cur = statement.find((r) => r.month === month);
     const lines = linesFor(d, month);
     let barberShare = 0;
@@ -364,7 +385,7 @@ export async function getMembersMonth(db: Db, month: string, now: Date = new Dat
     const lastVisit = d.attendance.reduce<string | null>((best, a) => (!best || a.date > best ? a.date : best), null);
     const payDates = d.ledger.filter((l) => l.kind === "PAGO" && l.period === month).map((l) => l.date).sort();
     return {
-      id: m.id, name: m.name, plan: m.plan, serviceType: m.serviceType, userId: m.userId,
+      id: m.id, name: m.name, plan: m.plan, serviceType: m.serviceType, payTiming: d.payTiming, userId: m.userId,
       barberName: (m.userId && nameOf.get(m.userId)) || "Sin asignar", active: m.active, phone: m.phone,
       price: priceFor(m.prices, month === today.slice(0, 7) ? today : `${month}-28`),
       attended: d.attendance.filter((a) => a.date.startsWith(month)).map((a) => a.date).sort(),

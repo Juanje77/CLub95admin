@@ -15,8 +15,9 @@ const num = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
 export const TYPE_LABEL: Record<string, string> = { CORTE: "Corte", CORTE_BARBA: "Corte y barba" };
 export const PLAN_LABEL: Record<string, string> = { BLACK: "Black", GOLD: "Gold" };
 export type PriceTable = Record<string, Record<string, number>>;
-export const STATUS_LABEL: Record<string, string> = { PAGO: "Pagó", PARCIAL: "Parcial", INPAGO: "Impago", SIN_MOVIMIENTO: "—" };
-export const STATUS_CHIP: Record<string, string> = { PAGO: "ok", PARCIAL: "warn", INPAGO: "err", SIN_MOVIMIENTO: "" };
+export const STATUS_LABEL: Record<string, string> = { PAGO: "Pagó", PARCIAL: "Parcial", INPAGO: "Impago", PENDIENTE: "Por cobrar", SIN_MOVIMIENTO: "—" };
+export const TIMING_LABEL: Record<string, string> = { INICIO: "A principio de mes (paga el mes que terminó)", FIN: "A fin de mes (paga el mismo mes)" };
+export const STATUS_CHIP: Record<string, string> = { PAGO: "ok", PARCIAL: "warn", INPAGO: "err", PENDIENTE: "", SIN_MOVIMIENTO: "" };
 
 export interface LedgerView { id: string; date: string; kind: string; debit: number; credit: number; method: string | null; note: string | null }
 export interface PlanillaDiff { text: string }
@@ -67,6 +68,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
   const [userId, setUserId] = useState(m.userId ?? "");
   const [type, setType] = useState(m.serviceType);
   const [plan, setPlan] = useState(m.plan);
+  const [timing, setTiming] = useState(m.payTiming);
   const [phone, setPhone] = useState(m.phone ?? "");
   const payMonth = payDate.slice(0, 7);
   return (
@@ -75,7 +77,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
         <h2 style={{ margin: 0 }}>{m.name}</h2>
         <span className={`chip ${m.balance > 0 ? "err" : "ok"}`}>{m.balance > 0 ? `Debe ${formatARS(m.balance)}` : m.balance < 0 ? `A favor ${formatARS(-m.balance)}` : "Al día"}</span>
       </div>
-      <div className="muted">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]} · {formatARS(m.price)} por sesión · atiende {m.barberName}{m.phone ? ` · ${m.phone}` : ""}</div>
+      <div className="muted">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]} · {formatARS(m.price)} por sesión · atiende {m.barberName} · paga {m.payTiming === "FIN" ? "a fin de mes" : "a principio de mes"}{m.phone ? ` · ${m.phone}` : ""}</div>
       <div className="kv">
         <span>Sesiones del mes</span><b className="num">{m.visits}</b>
         <span>A cobrar del mes</span><b className="num">{formatARS(m.charged)}</b>
@@ -156,15 +158,16 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
           <div className="row"><label className="field" style={{ flex: 1 }}><span>Precio por sesión ($)</span><input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} /></label><label className="field" style={{ flex: 1 }}><span>Rige desde</span><input type="date" value={priceFrom} onChange={(e) => setPriceFrom(e.target.value)} /></label></div>
           <button className="btn" type="submit" disabled={pending || num(price) <= 0}>Guardar precio</button>
         </form>
-        <form style={{ marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); run(() => editMember({ id: m.id, name, plan, userId: userId || null, serviceType: type, phone, active: m.active })); }}>
+        <form style={{ marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); run(() => editMember({ id: m.id, name, plan, payTiming: timing, userId: userId || null, serviceType: type, phone, active: m.active })); }}>
           <label className="field"><span>Nombre</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label className="field"><span>Barbero asignado</span><select value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Sin asignar</option>{barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
           <label className="field"><span>Plan</span><select value={plan} onChange={(e) => setPlan(e.target.value)}><option value="BLACK">Black</option><option value="GOLD">Gold</option></select></label>
           <label className="field"><span>Tipo</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="CORTE">Corte</option><option value="CORTE_BARBA">Corte y barba</option></select></label>
+          <label className="field"><span>Cuándo suele pagar</span><select value={timing} onChange={(e) => setTiming(e.target.value)}>{Object.entries(TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label className="field"><span>Teléfono</span><input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
           <div className="row">
             <button className="btn" type="submit" disabled={pending || !name.trim()}>Guardar datos</button>
-            <button className="btn danger" type="button" disabled={pending} onClick={() => run(() => editMember({ id: m.id, name: m.name, plan: m.plan, userId: m.userId, serviceType: m.serviceType, phone: m.phone ?? "", active: !m.active }))}>{m.active ? "Dar de baja" : "Reactivar"}</button>
+            <button className="btn danger" type="button" disabled={pending} onClick={() => run(() => editMember({ id: m.id, name: m.name, plan: m.plan, payTiming: m.payTiming, userId: m.userId, serviceType: m.serviceType, phone: m.phone ?? "", active: !m.active }))}>{m.active ? "Dar de baja" : "Reactivar"}</button>
           </div>
         </form>
       </details>
@@ -176,6 +179,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
 export function NewMemberForm({ barbers, prices }: { barbers: { id: string; name: string }[]; prices: PriceTable }) {
   const [name, setName] = useState("");
   const [plan, setPlan] = useState("BLACK");
+  const [timing, setTiming] = useState("INICIO");
   const [type, setType] = useState("CORTE");
   const [userId, setUserId] = useState("");
   const [price, setPrice] = useState("");
@@ -184,11 +188,12 @@ export function NewMemberForm({ barbers, prices }: { barbers: { id: string; name
   return (
     <details className="card" style={{ marginTop: 14 }}>
       <summary><b>+ Agregar un socio</b></summary>
-      <form onSubmit={(e) => { e.preventDefault(); run(() => saveMember({ name, plan, serviceType: type, userId: userId || null, price: price ? num(price) : null, phone, note: "" }), () => { setName(""); setPrice(""); setPhone(""); }); }}>
+      <form onSubmit={(e) => { e.preventDefault(); run(() => saveMember({ name, plan, payTiming: timing, serviceType: type, userId: userId || null, price: price ? num(price) : null, phone, note: "" }), () => { setName(""); setPrice(""); setPhone(""); }); }}>
         <label className="field"><span>Nombre</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="field"><span>Plan</span><select value={plan} onChange={(e) => setPlan(e.target.value)}><option value="BLACK">Black</option><option value="GOLD">Gold</option></select></label>
         <label className="field"><span>Tipo</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="CORTE">Corte ({formatARS(prices[plan]?.CORTE ?? 0)} por sesión)</option><option value="CORTE_BARBA">Corte y barba ({formatARS(prices[plan]?.CORTE_BARBA ?? 0)} por sesión)</option></select></label>
         <label className="field"><span>Barbero asignado</span><select value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Sin asignar</option>{barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+        <label className="field"><span>Cuándo suele pagar</span><select value={timing} onChange={(e) => setTiming(e.target.value)}>{Object.entries(TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label className="field"><span>Precio por sesión (vacío = el del plan)</span><input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
         <label className="field"><span>Teléfono (opcional)</span><input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
         <button className="btn primary" type="submit" disabled={pending || !name.trim()}>Agregar socio</button>

@@ -5,6 +5,7 @@ import { getDayFigures } from "../src/services/figures";
 import { getMonthGrid } from "../src/services/grid";
 import { computeSettlement } from "../src/services/settlement";
 import { syncAlerts } from "../src/services/alerts";
+import { dueDate, defaultPeriod, monthStatus } from "../src/domain/members";
 import { DomainError, type Actor } from "../src/services/common";
 import { freshDb, seed, type Seed } from "./helpers/db";
 
@@ -125,7 +126,7 @@ describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () 
     await setAttendance(db, { actor: ale, memberId: m1, date: "2026-10-02", present: true, now: NOW });
     expect(await row(m1)).toMatchObject({ visits: 1, manual: false, charged: 16500 });
     await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 });
-    expect(await row(m1)).toMatchObject({ visits: 4, manual: true, charged: 66000, status: "INPAGO" });
+    expect(await row(m1)).toMatchObject({ visits: 4, manual: true, charged: 66000, status: "PENDIENTE" }); // todavía no venció
     await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: null }); // vuelve a contar la asistencia
     expect(await row(m1)).toMatchObject({ visits: 1, manual: false, charged: 16500 });
     expect(await db.auditLog.count({ where: { entity: "MemberMonth" } })).toBe(2); // alta y borrado
@@ -148,11 +149,11 @@ describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () 
     await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // 66.000
     await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-02", amount: 66000, method: "BANCO", now: NOW });
     expect((await row(m1, "2026-09")).status).toBe("PAGO");
-    expect((await row(m1, "2026-10")).status).toBe("INPAGO");
+    expect((await row(m1, "2026-10")).status).toBe("PENDIENTE");
     await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-03", amount: 66000, method: "BANCO", now: NOW });
     expect((await row(m1, "2026-10")).status).toBe("PAGO");
     await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-04", amount: 66000, method: "BANCO", now: NOW }); // ya no debe nada: queda a favor
-    expect((await getMemberStatement(db, m1)).map((r) => [r.month, r.status, r.balance])).toEqual([["2026-09", "PAGO", 0], ["2026-10", "PAGO", -66000]]);
+    expect((await getMemberStatement(db, m1)).map((r) => [r.month, r.status, r.balance])).toEqual([["2026-09", "PAGO", -66000], ["2026-10", "PAGO", -66000]]); // el tercer cobro (principio de mes, sin deuda) cae en septiembre
     expect((await row(m1)).balance).toBe(-66000);
   });
   it("si un socio no paga, la deuda se arrastra mes a mes y no se pierde", async () => {
@@ -160,11 +161,11 @@ describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () 
     await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-09", sessions: 5 }); // 82.500
     await registerPayment(db, { actor: ale, memberId: m1, date: "2026-09-10", amount: 30000, method: "BANCO", period: "2026-09", now: NOW });
     await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // 66.000
-    const st = await getMemberStatement(db, m1);
+    const st = await getMemberStatement(db, m1, NOW);
     expect(st.map((r) => [r.month, r.due, r.paid, r.balance, r.status])).toEqual([
-      ["2026-08", 66000, 0, 66000, "INPAGO"],
+      ["2026-08", 66000, 0, 66000, "INPAGO"], // venció el 10/09
       ["2026-09", 82500, 30000, 118500, "PARCIAL"],
-      ["2026-10", 66000, 0, 184500, "INPAGO"],
+      ["2026-10", 66000, 0, 184500, "PENDIENTE"], // vence el 10/11
     ]);
     expect(await row(m1)).toMatchObject({ balance: 184500, carried: 118500, oldestUnpaid: "2026-08" });
   });
@@ -174,6 +175,44 @@ describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () 
     expect(await membershipLaborFor(db, ids.jere, "2026-10")).toBe(36000);
     const t = await membershipMonthTotals(db, "2026-10");
     expect(t).toMatchObject({ visits: 4, income: 66000, drinkCost: 4 * 1500 });
+  });
+});
+
+describe("cuándo paga cada socio: principio o fin de mes", () => {
+  it("las fechas de vencimiento y el mes por defecto salen del hábito de pago", () => {
+    expect(dueDate("2026-09", "INICIO", 10)).toBe("2026-10-10"); // paga el mes que terminó, los primeros días del siguiente
+    expect(dueDate("2026-12", "INICIO", 10)).toBe("2027-01-10");
+    expect(dueDate("2026-09", "FIN", 10)).toBe("2026-09-31"); // paga a fin del mismo mes
+    expect(defaultPeriod("INICIO", "2026-10-03", null, 10)).toBe("2026-09");
+    expect(defaultPeriod("INICIO", "2026-01-03", null, 10)).toBe("2025-12");
+    expect(defaultPeriod("INICIO", "2026-10-20", null, 10)).toBe("2026-10");
+    expect(defaultPeriod("FIN", "2026-10-03", null, 10)).toBe("2026-10");
+    expect(defaultPeriod("FIN", "2026-10-28", "2026-08", 10)).toBe("2026-08"); // si debe, cubre lo más viejo
+    expect(monthStatus(1000, 0, true)).toBe("PENDIENTE");
+    expect(monthStatus(1000, 0, false)).toBe("INPAGO");
+    expect(monthStatus(1000, 400, true)).toBe("PARCIAL");
+  });
+  it("un mes sin pagar es 'por cobrar' hasta que vence y después 'impago'", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-09", sessions: 4 });
+    const at = async (d: string) => (await getMembersMonth(db, "2026-09", new Date(`${d}T15:00:00Z`))).members.find((m) => m.id === m1)!.status;
+    expect(await at("2026-10-08")).toBe("PENDIENTE"); // paga a principio de mes: vence el 10/10
+    expect(await at("2026-10-12")).toBe("INPAGO");
+    await updateMember(db, { actor: ale, id: m1, payTiming: "FIN" });
+    expect(await at("2026-10-01")).toBe("INPAGO"); // el que paga a fin de mes ya tendría que haber pagado septiembre
+  });
+  it("el que paga a fin de mes tiene el mes en curso por cobrar; el de principio, el mes que terminó", async () => {
+    const fin = (await createMember(db, { actor: ale, name: "Paga a fin", serviceType: "CORTE", userId: null, price: 16500, payTiming: "FIN", now: NOW })).id;
+    await setMemberSessions(db, { actor: ale, memberId: fin, month: "2026-10", sessions: 4 });
+    expect((await row(fin, "2026-10")).status).toBe("PENDIENTE");
+  });
+  it("un cobro de los primeros días sin deuda cubre el mes que terminó (principio de mes) o el mismo mes (fin de mes)", async () => {
+    const ini = await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-03", amount: 10000, method: "BANCO", now: NOW });
+    expect(ini.period).toBe("2026-09");
+    await updateMember(db, { actor: ale, id: m2, payTiming: "FIN" });
+    const fin = await registerPayment(db, { actor: ale, memberId: m2, date: "2026-10-03", amount: 10000, method: "BANCO", now: NOW });
+    expect(fin.period).toBe("2026-10");
+    expect(await code(updateMember(db, { actor: ale, id: m1, payTiming: "NUNCA" }))).toBe("COBRO_INVALIDO");
+    expect(await code(createMember(db, { actor: ale, name: "X", serviceType: "CORTE", userId: null, payTiming: "NUNCA", now: NOW }))).toBe("COBRO_INVALIDO");
   });
 });
 

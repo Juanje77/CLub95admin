@@ -263,14 +263,14 @@ export async function toggleAttendance(p: { memberId: string; date: string; pres
   });
 }
 
-export async function saveMember(p: { name: string; plan: string; serviceType: string; userId: string | null; price: number | null; phone: string; note: string }) {
+export async function saveMember(p: { name: string; plan: string; payTiming: string; serviceType: string; userId: string | null; price: number | null; phone: string; note: string }) {
   return run(async (actor) => {
     await createMember(db, { actor, ...p, price: p.price ? int(p.price) : undefined });
     return "Socio agregado.";
   });
 }
 
-export async function editMember(p: { id: string; name: string; plan?: string; userId: string | null; serviceType: string; phone: string; active: boolean }) {
+export async function editMember(p: { id: string; name: string; plan?: string; payTiming?: string; userId: string | null; serviceType: string; phone: string; active: boolean }) {
   return run(async (actor) => {
     await updateMember(db, { actor, ...p });
     return "Socio actualizado.";
