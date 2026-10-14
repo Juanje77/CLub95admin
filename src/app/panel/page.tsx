@@ -5,6 +5,7 @@ import Shell from "../../components/Shell";
 import { formatARS, formatDate, monthLabel, shiftMonth, todayBA } from "../../domain/money";
 import { requireAdmin } from "../../lib/auth";
 import { db } from "../../lib/db";
+import { getMemberFunds } from "../../services/memberfunds";
 import { getPanel } from "../../services/report";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const today = todayBA();
   const month = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : today.slice(0, 7);
-  const { report: r, series, weekdays } = await getPanel(db, month);
+  const [{ report: r, series, weekdays }, funds] = await Promise.all([getPanel(db, month), getMemberFunds(db, month)]);
   const prev = series[series.length - 2];
   const cur = series[series.length - 1]!;
   const pct = (a: number, b: number) => (b > 0 ? `${a >= b ? "↑" : "↓"} ${Math.abs(Math.round(((a - b) / b) * 100))}% vs ${monthLabel(prev!.month).split(" ")[0]}` : "sin mes anterior para comparar");
@@ -52,6 +53,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <div className="card"><div className="muted">Mano de obra</div><div className="num big2">{formatARS(r.labor.total)}</div><div className="delta">{r.income.total > 0 ? `${Math.round((r.labor.total / r.income.total) * 100)}% de los ingresos` : "—"}</div></div>
         <div className="card"><div className="muted">Margen bruto</div><div className="num big2">{formatARS(r.grossMargin)}</div><div className="delta">{r.income.total > 0 ? `${Math.round((r.grossMargin / r.income.total) * 100)}% de los ingresos` : "—"}</div></div>
         <div className="card"><div className="muted">Resultado final</div><div className={`num big2 ${r.result >= 0 ? "okc" : "errc"}`}>{r.result >= 0 ? "▲ " : "▼ "}{signed(r.result)}</div><div className="delta">{r.result >= 0 ? "ganancia del mes" : "pérdida del mes"}</div></div>
+      </div>
+
+      <h2>Cuentas de socios <Link className="noprint" href={`/socios?mes=${month}&vista=cajas`} style={{ fontSize: ".8rem", fontWeight: 600 }}>ver detalle →</Link></h2>
+      <div className="stats">
+        <div className="card"><div className="muted">Efectivo a rendir</div><div className={`num big2 ${funds.balances.efectivo < 0 ? "errc" : ""}`}>{formatARS(funds.balances.efectivo)}</div><div className="delta">cobrado − cortes de Ale</div></div>
+        <div className="card"><div className="muted">Cuenta de bebida</div><div className="num big2">{formatARS(funds.balances.bebida)}</div><div className="delta">+ {formatARS(funds.current.drink)} este mes</div></div>
+        <div className="card"><div className="muted">Ganancia de {funds.profitBarbers.join(", ")}</div><div className="num big2">{formatARS(funds.balances.ganancia)}</div><div className="delta">+ {formatARS(funds.current.profit)} este mes</div></div>
       </div>
 
       <h2>Resumen del mes</h2>
