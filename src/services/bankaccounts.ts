@@ -6,7 +6,8 @@ import { getMonthGrid } from "./grid";
  * Por dónde entra la plata de cada cosa y de qué cuenta se paga. Por defecto (lo que cuenta el dueño):
  *  - Cuenta de Juan (BRUBANK_JUAN): los socios que pagan por transferencia y la venta de bebidas, ceras, polvos y aceites.
  *  - Cuenta de Jere (MP_JERE): los cortes diarios de Jere que no le pagaron en efectivo.
- *  - Cuenta de Ale (BRUBANK): los cortes diarios de Lucio que no le pagaron en efectivo; de esa cuenta se le paga a Lucio su 60 %.
+ *  - Cuenta de Ale (BRUBANK): los cortes diarios de Lucio y de Ale que no les pagaron en efectivo; de esa cuenta se le paga a Lucio su 60 %
+ *    y Ale retira su parte.
  * Se puede cambiar en Setting "accountRouting" con la misma forma que DEFAULT_ROUTING.
  */
 export interface Route {
@@ -22,14 +23,16 @@ export interface Route {
   drinks?: boolean;
   /** Entra la venta de ceras, polvos y aceites. */
   products?: boolean;
-  /** Usuarios (username) a los que se les paga su parte desde esta cuenta. */
+  /** Usuarios (username) a los que se les paga su parte desde esta cuenta (si es el dueño de la cuenta, la "retira"). */
   pays?: string[];
+  /** Usuario (username) dueño de la cuenta: lo que le corresponde lo retira en lugar de que se le pague. */
+  owner?: string;
 }
 
 export const DEFAULT_ROUTING: Route[] = [
   { key: "BRUBANK_JUAN", who: "Juan (dueño)", barbers: [], memberTransfers: true, drinks: true, products: true },
   { key: "MP_JERE", who: "Jere", barbers: ["jere"] },
-  { key: "BRUBANK", who: "Ale", barbers: ["lucio"], pays: ["lucio"] },
+  { key: "BRUBANK", who: "Ale", owner: "ale", barbers: ["lucio", "ale"], pays: ["lucio", "ale"] },
 ];
 
 export interface AccountLine { label: string; amount: number }
@@ -111,7 +114,8 @@ export async function getBankAccounts(db: Db, month: string, now: Date = new Dat
     }
     const payouts: AccountLine[] = (r.pays ?? []).map((u) => {
       const id = idOf.get(u);
-      return { label: `Pago a ${id ? nameOf.get(id) : u} (su parte de los cortes)`, amount: id ? labor.get(id) ?? 0 : 0 };
+      const name = id ? nameOf.get(id) : u;
+      return { label: u === r.owner ? `Retiro de ${name} (su parte de los cortes)` : `Pago a ${name} (su parte de los cortes)`, amount: id ? labor.get(id) ?? 0 : 0 };
     });
     const expectedTotal = expected.reduce((s, l) => s + l.amount, 0);
     const payoutsTotal = payouts.reduce((s, l) => s + l.amount, 0);

@@ -349,7 +349,7 @@ for (const who of ["Juan", "Jere", "Ale"]) await page.getByRole("region", { name
 check(/Socios que pagaron por transferencia/.test(await page.getByRole("region", { name: "Cuenta de Juan" }).innerText()), "la cuenta de Juan junta los socios que pagan por transferencia, las bebidas y las ceras");
 check(/Cortes de Jere/.test(await page.getByRole("region", { name: "Cuenta de Jere" }).innerText()), "la cuenta de Jere junta sus cortes");
 const aleCard = await page.getByRole("region", { name: "Cuenta de Ale" }).innerText();
-check(/Cortes de Lucio/.test(aleCard) && /Pago a Lucio/.test(aleCard), "la cuenta de Ale junta los cortes de Lucio y de ahí sale su 60 %");
+check(/Cortes de Lucio/.test(aleCard) && /Cortes de Ale/.test(aleCard) && /Pago a Lucio/.test(aleCard) && /Retiro de Ale/.test(aleCard), "la cuenta de Ale junta los cortes de Lucio y de Ale; de ahí sale el 60 % de Lucio y el retiro de Ale");
 await shot("cuentas-bancarias");
 
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN

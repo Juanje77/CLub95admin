@@ -24,6 +24,7 @@ beforeEach(async () => {
 
   await setServiceCount(db, { actor: admin, date: DAY, userId: ids.jere, serviceType: "CORTE", count: 2, now: NOW }); // 40.000
   await setServiceCount(db, { actor: admin, date: DAY, userId: ids.lucio, serviceType: "CORTE", count: 3, now: NOW }); // 60.000 · Lucio cobra (20.000 − 3.000) × 60 % = 10.200 por corte
+  await setServiceCount(db, { actor: admin, date: DAY, userId: ids.ale, serviceType: "CORTE", count: 1, now: NOW }); // 20.000 · Ale se queda con 20.000 − 3.000 = 17.000
   await setProductCount(db, { actor: admin, date: DAY, productId: coca.id, count: 2, now: NOW }); // 3.400
   await setProductCount(db, { actor: admin, date: DAY, productId: cera.id, count: 1, now: NOW }); // 25.000
   const socio = await createMember(db, { actor: admin, name: "Socio", serviceType: "CORTE", userId: ids.jere, price: 16500, startDate: "2026-09-01", now: NOW });
@@ -45,15 +46,18 @@ describe("cuentas bancarias: por dónde entra la plata", () => {
     ]);
     expect(by("BRUBANK_JUAN").expectedTotal).toBe(58400);
     expect(by("MP_JERE").expected).toEqual([{ label: "Cortes de Jere", amount: 40000 }]);
-    expect(by("BRUBANK").expected).toEqual([{ label: "Cortes de Lucio", amount: 60000 }]);
+    expect(by("BRUBANK").expected).toEqual([{ label: "Cortes de Lucio", amount: 60000 }, { label: "Cortes de Ale", amount: 20000 }]); // los de Ale entran a la misma cuenta que los de Lucio
   });
 
-  it("de la cuenta de Ale se le paga a Lucio su 60 %", async () => {
+  it("de la cuenta de Ale se le paga a Lucio su 60 % y Ale retira su parte", async () => {
     const ale = (await getBankAccounts(db, "2026-10", NOW)).accounts.find((a) => a.key === "BRUBANK")!;
-    expect(ale.payouts).toEqual([{ label: "Pago a Lucio (su parte de los cortes)", amount: 30600 }]);
-    await setDeclared(db, { actor: admin, date: DAY, account: "BRUBANK", amount: 50000, now: NOW });
+    expect(ale.payouts).toEqual([
+      { label: "Pago a Lucio (su parte de los cortes)", amount: 30600 },
+      { label: "Retiro de Ale (su parte de los cortes)", amount: 17000 },
+    ]);
+    await setDeclared(db, { actor: admin, date: DAY, account: "BRUBANK", amount: 70000, now: NOW });
     const after = (await getBankAccounts(db, "2026-10", NOW)).accounts.find((a) => a.key === "BRUBANK")!;
-    expect(after).toMatchObject({ declared: 50000, gap: -10000, payoutsTotal: 30600, remaining: 19400 });
+    expect(after).toMatchObject({ declared: 70000, expectedTotal: 80000, gap: -10000, payoutsTotal: 47600, remaining: 22400 });
   });
 
   it("lo ingresado de cada día se compara con lo esperado: la diferencia es lo que se pagó en efectivo", async () => {
@@ -71,6 +75,6 @@ describe("cuentas bancarias: por dónde entra la plata", () => {
     await db.setting.create({ data: { key: "accountRouting", value: JSON.stringify([{ key: "BRUBANK", who: "Ale", barbers: ["jere", "lucio"] }]) } });
     const r = await getBankAccounts(db, "2026-10", NOW);
     expect(r.accounts).toHaveLength(1);
-    expect(r.accounts[0]!.expectedTotal).toBe(100000);
+    expect(r.accounts[0]!.expectedTotal).toBe(100000); // Jere y Lucio; sin "owner" no hay retiro
   });
 });

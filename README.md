@@ -87,9 +87,9 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 |---|---|
 | **Cuenta de Juan** (`BRUBANK_JUAN`) | socios que pagan por transferencia, venta de bebidas y de ceras, polvos y aceites |
 | **Cuenta de Jere** (`MP_JERE`) | los cortes diarios de Jere que no le pagaron en efectivo |
-| **Cuenta de Ale** (`BRUBANK`) | los cortes diarios de Lucio que no le pagaron en efectivo; **de esta cuenta se le paga a Lucio su 60 %** |
+| **Cuenta de Ale** (`BRUBANK`) | los cortes diarios de **Lucio y de Ale** que no les pagaron en efectivo; **de esta cuenta se le paga a Lucio su 60 %** y **Ale retira su parte** |
 
-Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en efectivo), lo que **ingresó** (el "dinero ingresado" de cada día en la planilla) y la **diferencia**, que es lo que se pagó en efectivo o todavía no se cargó. En la cuenta de Ale también se ve lo que sale (el pago a Lucio) y lo que queda. El recorrido se puede cambiar en `Setting` `accountRouting` (lista de `{ key, who, barbers, memberTransfers, drinks, products, pays }`).
+Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en efectivo), lo que **ingresó** (el "dinero ingresado" de cada día en la planilla) y la **diferencia**, que es lo que se pagó en efectivo o todavía no se cargó. En la cuenta de Ale también se ve lo que sale (el pago a Lucio y el retiro de Ale) y lo que queda. El recorrido se puede cambiar en `Setting` `accountRouting` (lista de `{ key, who, owner, barbers, memberTransfers, drinks, products, pays }`).
 
 ### Efectivo y cuentas de socios
 
