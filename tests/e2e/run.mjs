@@ -341,6 +341,17 @@ check(true, "una compra de bebida baja la cuenta: $ 30.000");
 check(/Ganancia de Lucio/.test(await page.locator("body").innerText()), "hay una cuenta de ganancia de Lucio");
 await shot("socios-cuentas");
 
+// 9f. Cuentas bancarias: por dónde entra la plata (Juan, Jere y Ale)
+await page.getByRole("link", { name: "Más", exact: true }).click();
+await page.getByRole("link", { name: /Cuentas bancarias/ }).click();
+await page.getByRole("heading", { name: /Cuentas · octubre 2026/i }).waitFor();
+for (const who of ["Juan", "Jere", "Ale"]) await page.getByRole("region", { name: `Cuenta de ${who}` }).waitFor();
+check(/Socios que pagaron por transferencia/.test(await page.getByRole("region", { name: "Cuenta de Juan" }).innerText()), "la cuenta de Juan junta los socios que pagan por transferencia, las bebidas y las ceras");
+check(/Cortes de Jere/.test(await page.getByRole("region", { name: "Cuenta de Jere" }).innerText()), "la cuenta de Jere junta sus cortes");
+const aleCard = await page.getByRole("region", { name: "Cuenta de Ale" }).innerText();
+check(/Cortes de Lucio/.test(aleCard) && /Pago a Lucio/.test(aleCard), "la cuenta de Ale junta los cortes de Lucio y de ahí sale su 60 %");
+await shot("cuentas-bancarias");
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();

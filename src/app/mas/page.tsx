@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const ITEMS: { href: string; title: string; text: string }[] = [
   { href: "/panel", title: "Panel del dueño", text: "Resumen mensual, comparativo, ranking, días fuertes y flojos, descuadres. Exporta a Excel y PDF." },
+  { href: "/cuentas", title: "Cuentas bancarias", text: "Por dónde entra la plata: cuenta de Juan, de Jere y de Ale; lo que debería entrar, lo que ingresó y lo que se paga desde cada una." },
   { href: "/socios?vista=cajas", title: "Cuentas de socios", text: "Efectivo a rendir, cuenta de bebida y ganancia de Lucio: saldos, rendiciones, compras y retiros." },
   { href: "/efectivo", title: "Efectivo", text: "Fila de efectivo acumulado, retiros de barberos y rendición al dueño." },
   { href: "/auditoria", title: "Auditoría", text: "Quién cargó, modificó o borró cada cosa, y cuándo." },

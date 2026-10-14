@@ -79,6 +79,18 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 - El **barbero** cobra (precio − bebida) × su comisión por cada sesión que atendió, haya pagado o no el socio: si un socio no paga, el local es quien carga con esa deuda y la sigue reclamando en la cuenta corriente.
 - Si la asistencia tildada no coincide con los "socios" cargados en la planilla del día, aparece una nota de diferencias (no se corrige sola).
 
+## Cuentas bancarias
+
+**Más → Cuentas bancarias** (solo admin/dueño). Muestra por dónde entra la plata, mes a mes. Por defecto, como se trabaja hoy:
+
+| Cuenta | Qué entra |
+|---|---|
+| **Cuenta de Juan** (`BRUBANK_JUAN`) | socios que pagan por transferencia, venta de bebidas y de ceras, polvos y aceites |
+| **Cuenta de Jere** (`MP_JERE`) | los cortes diarios de Jere que no le pagaron en efectivo |
+| **Cuenta de Ale** (`BRUBANK`) | los cortes diarios de Lucio que no le pagaron en efectivo; **de esta cuenta se le paga a Lucio su 60 %** |
+
+Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en efectivo), lo que **ingresó** (el "dinero ingresado" de cada día en la planilla) y la **diferencia**, que es lo que se pagó en efectivo o todavía no se cargó. En la cuenta de Ale también se ve lo que sale (el pago a Lucio) y lo que queda. El recorrido se puede cambiar en `Setting` `accountRouting` (lista de `{ key, who, barbers, memberTransfers, drinks, products, pays }`).
+
 ### Efectivo y cuentas de socios
 
 **Socios → Efectivo y cuentas** (solo admin/dueño). Tres cuentas que se acumulan desde el primer dato y se llevan aparte de la caja diaria:

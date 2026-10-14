@@ -55,7 +55,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <div className="card"><div className="muted">Resultado final</div><div className={`num big2 ${r.result >= 0 ? "okc" : "errc"}`}>{r.result >= 0 ? "▲ " : "▼ "}{signed(r.result)}</div><div className="delta">{r.result >= 0 ? "ganancia del mes" : "pérdida del mes"}</div></div>
       </div>
 
-      <h2>Cuentas de socios <Link className="noprint" href={`/socios?mes=${month}&vista=cajas`} style={{ fontSize: ".8rem", fontWeight: 600 }}>ver detalle →</Link></h2>
+      <h2>Cuentas de socios <Link className="noprint" href={`/socios?mes=${month}&vista=cajas`} style={{ fontSize: ".8rem", fontWeight: 600 }}>ver detalle →</Link> <Link className="noprint" href={`/cuentas?mes=${month}`} style={{ fontSize: ".8rem", fontWeight: 600 }}>cuentas bancarias →</Link></h2>
       <div className="stats">
         <div className="card"><div className="muted">Efectivo a rendir</div><div className={`num big2 ${funds.balances.efectivo < 0 ? "errc" : ""}`}>{formatARS(funds.balances.efectivo)}</div><div className="delta">cobrado − cortes de Ale</div></div>
         <div className="card"><div className="muted">Cuenta de bebida</div><div className="num big2">{formatARS(funds.balances.bebida)}</div><div className="delta">+ {formatARS(funds.current.drink)} este mes</div></div>
