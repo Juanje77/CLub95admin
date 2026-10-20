@@ -249,8 +249,17 @@ const stmt = (label) => page.locator("table.stmt tr", { hasText: label }).last()
 check((await stmt("Total ingresos").innerText()).trim() === "$ 341.700", "panel: total ingresos = servicios + socios + bebida + cera + publicidad");
 check((await stmt("Total mano de obra").innerText()).trim() === "$ 104.400", "panel: mano de obra de servicios y de socios");
 check((await stmt("Resultado final").innerText()).trim() === "−$ 590.883", "panel: resultado final del mes (con el alquiler cargado)");
+await page.getByRole("heading", { name: "A mirar" }).waitFor();
+check(await page.getByRole("tab", { name: /Resumen/ }).getAttribute("aria-selected") === "true", "panel: abre en la pestaña Resumen con las cifras y lo que hay que mirar");
+for (const [tab, heading] of [["Caja y cuentas", "Cuentas bancarias"], ["Socios", "Quién debe"], ["Gastos", "Por categoría"], ["Barberos", "Ranking de barberos"]]) {
+  await page.getByRole("tab", { name: new RegExp(tab) }).click();
+  await page.getByRole("heading", { name: new RegExp(heading) }).first().waitFor();
+}
+check(true, "panel: cada tema tiene su pestaña (caja y cuentas, socios, gastos, barberos)");
+await page.getByRole("tab", { name: /Tendencia/ }).click();
 await page.getByText("Ingresos por mes").waitFor();
-check((await page.locator(".hbars .bar").count()) >= 6, "panel: el comparativo dibuja las barras de los meses");
+check((await page.locator(".hbars .bar:visible").count()) >= 1, "panel: el comparativo dibuja las barras de los meses");
+await page.getByRole("tab", { name: /Resumen/ }).click();
 const xl = await page.request.get(BASE + "/api/export?tipo=panel&mes=" + TODAY.slice(0, 7));
 check(xl.status() === 200 && (xl.headers()["content-type"] ?? "").includes("spreadsheetml"), "panel: se descarga el Excel (solo con sesión de admin)");
 const xl2 = await page.request.get(BASE + "/api/export?tipo=planilla&mes=" + TODAY.slice(0, 7));

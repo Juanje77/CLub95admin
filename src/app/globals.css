@@ -167,6 +167,9 @@ table.mini th:first-child, table.mini td:first-child { text-align: left; }
   .card { break-inside: avoid; border-color: #bbb; }
   details > summary { display: none; }
   details[open] > *, details > * { display: block; }
+  .ptabs { display: none !important; }
+  .tabpanel[hidden] { display: block !important; }
+  .onlyprint { display: block !important; }
 }
 
 /* Cambios sin enviar (sin señal): se ven distintos hasta que el servidor los confirma */
@@ -214,3 +217,20 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
   .drawer-back { padding: 0; }
   .drawer { border-radius: 0; min-height: 100%; max-width: none; }
 }
+
+/* Panel del dueño: pestañas por tema */
+.onlyprint { display: none; }
+.ptabs { position: sticky; top: 0; z-index: 30; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; margin: 0 0 6px; background: var(--bg); border-bottom: 1px solid var(--line); -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.ptabs::-webkit-scrollbar { display: none; }
+.ptab { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 9px 14px; font-size: .9rem; font-weight: 700; min-height: 44px; white-space: nowrap; }
+.ptab[aria-selected="true"] { background: var(--brand); color: var(--bg); border-color: var(--brand); }
+.pbadge { margin-left: 6px; background: var(--err); color: #fff; border-radius: 999px; padding: 1px 7px; font-size: .72rem; }
+.tabpanel[hidden] { display: none; }
+.attn { display: grid; gap: 6px; margin: 8px 0; }
+.attn a { display: flex; justify-content: space-between; gap: 10px; align-items: center; text-decoration: none; color: var(--ink); padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); border-left-width: 5px; }
+.attn a.err { border-left-color: var(--err); } .attn a.warn { border-left-color: var(--warn); } .attn a.ok { border-left-color: var(--ok); }
+.attn a b { white-space: nowrap; }
+.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0; }
+@media (min-width: 760px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+.kpis .card { padding: 10px; }
+.sec-link { font-size: .85rem; font-weight: 600; }

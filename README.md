@@ -7,7 +7,7 @@ Reemplaza la planilla `CLUB95_GESTION_ALE.xlsx`. Se usa desde el celular (instal
 | **Planilla** | Cantidad de servicios, socios, bebidas y ceras de cada día; control del día (ingresos, mano de obra, dinero que debe haber, **ganancia del día**); dinero ingresado y cierre de caja | barberos (lo suyo, hoy) · admin/dueño (todo) |
 | **Socios** | Planilla mensual de socios (sesiones, total, cobrado, diferencia, estado), cuenta corriente que arrastra la deuda, cobros y ajustes con motivo; asistencia por día | barberos tildan hoy · admin/dueño todo |
 | **Gastos** | Alta rápida con foto del comprobante, conceptos, gastos fijos con recordatorio, otros ingresos | admin/dueño |
-| **Panel** | Resumen mensual tipo `TOTALES`, comparativo de 6 meses, ranking de barberos, días fuertes y flojos, descuadres. Excel y PDF | admin/dueño |
+| **Panel** | Todo el mes en un lugar, ordenado en pestañas: **Resumen** (cifras, lo que hay que mirar y el resultado), **Caja y cuentas** (cuentas bancarias, efectivo, cuentas de socios, descuadres), **Socios** (cobrado, deuda, quién debe), **Gastos** (por categoría y concepto, gastos fijos), **Barberos** y **Tendencia** (6 meses, días fuertes y flojos). Excel y PDF | admin/dueño |
 | **Efectivo** | Fila de efectivo acumulado, retiros de barberos, rendición al dueño | barbero (su retiro) · admin/dueño |
 | **Alertas** | Todo lo que hay que atender para que la caja cierre todos los días | cada rol ve las suyas |
 | **Configuración** | Equipo y comisiones, tarifas, productos y stock, PIN de cada usuario | admin/dueño |
@@ -50,6 +50,10 @@ Moneda ARS sin decimales (`$ 12.500`), fechas `dd/mm/aaaa`, zona horaria `Americ
 - **Dinero que debe haber** = ingresos − mano de obra.
 - **Ganancia del día** = parte del local en los servicios + margen de la bebida incluida + margen de las bebidas sueltas + margen de ceras/polvo/aceite. Las membresías se liquidan aparte.
 - **Diferencia de caja** = dinero ingresado − ingresos del día. El cambio dejado **no** es ingreso. **Los socios se llevan aparte del día a día:** sus cobros no suman a la caja del día (ver [Efectivo y cuentas de socios](#efectivo-y-cuentas-de-socios)).
+
+### El Panel por pestañas
+
+La pestaña **Resumen** abre con las cuatro cifras del mes y la lista **A mirar**, que junta lo que requiere atención (descuadres de caja, gastos fijos sin cargar, socios con deuda, efectivo a rendir, pérdida del mes) con un enlace directo al detalle. Cada pestaña muestra un número rojo cuando hay algo pendiente. Se puede abrir una pestaña directo con `/panel#socios`. Al imprimir o guardar como PDF salen todas las secciones juntas.
 
 ### Cómo se calcula el mes (Panel)
 
