@@ -1,0 +1,37 @@
+import Link from "next/link";
+import Shell from "../../components/Shell";
+import { requireAdmin } from "../../lib/auth";
+
+export const dynamic = "force-dynamic";
+
+const ITEMS: { href: string; title: string; text: string }[] = [
+  { href: "/panel", title: "Panel del dueño", text: "Resumen mensual, comparativo, ranking, días fuertes y flojos, descuadres. Exporta a Excel y PDF." },
+  { href: "/barberos", title: "A pagar a los barberos", text: "Cuánto hay que pagarle a cada barbero: cortes, socios, lo que ya cobró y lo que falta. Registro de pagos." },
+  { href: "/cuentas", title: "Cuentas bancarias", text: "Por dónde entra la plata: cuenta de Juan, de Jere y de Ale; lo que debería entrar, lo que ingresó y lo que se paga desde cada una." },
+  { href: "/socios?vista=cajas", title: "Cuentas de socios", text: "Efectivo a rendir, cuenta de bebida y ganancia de Lucio: saldos, rendiciones, compras y retiros." },
+  { href: "/efectivo", title: "Efectivo", text: "Fila de efectivo acumulado, retiros de barberos y rendición al dueño." },
+  { href: "/auditoria", title: "Auditoría", text: "Quién cargó, modificó o borró cada cosa, y cuándo." },
+  { href: "/config", title: "Configuración", text: "Equipo y comisiones, tarifas, productos y stock, PIN de cada usuario." },
+];
+
+export default async function MasPage() {
+  const user = await requireAdmin();
+  return (
+    <Shell user={user}>
+      <h1>Más</h1>
+      <div className="grid" style={{ marginTop: 12 }}>
+        {ITEMS.map((i) => (
+          <Link key={i.href} href={i.href} className="big alt" style={{ textDecoration: "none" }}>
+            {i.title}
+            <small>{i.text}</small>
+          </Link>
+        ))}
+      </div>
+      <p className="muted" style={{ marginTop: 16, fontSize: ".78rem" }}>
+        Versión {(process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7)}
+        {process.env.VERCEL_GIT_COMMIT_REF ? ` · rama ${process.env.VERCEL_GIT_COMMIT_REF}` : ""}
+        {process.env.VERCEL_ENV ? ` · ${process.env.VERCEL_ENV}` : ""}
+      </p>
+    </Shell>
+  );
+}

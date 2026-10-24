@@ -1,0 +1,39 @@
+{
+  "name": "club95admin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestión de Club 95 (caja, gastos, membresías, panel del dueño)",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "import:planilla": "tsx src/import/cli.ts",
+    "alerts": "tsx src/services/alerts-cli.ts",
+    "seed": "tsx src/seed-cli.ts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "e2e": "bash scripts/e2e.sh",
+    "vercel-build": "tsx scripts/vercel-build.ts",
+    "seed:prod": "node scripts/prisma-pg.mjs && prisma generate --schema prisma/schema.postgres.prisma && tsx src/seed-cli.ts --random-pins"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "playwright-core": "^1.63.0",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "exceljs": "^4.4.0",
+    "next": "^15.5.27",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}
