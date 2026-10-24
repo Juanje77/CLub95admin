@@ -58,21 +58,37 @@ export async function barberMonth(db: Db, userId: string, month: string): Promis
   return { laborServices, laborMembership, entitled, cashTaken, ownTransfers, paid, collected, balance: entitled - collected };
 }
 
-export interface LedgerLine {
+/** Una fila diaria del mayor de un barbero que cobra en su cuenta. Todo en pesos; `debt` > 0 = el barbero le debe al local. */
+export interface LedgerRow {
   date: string;
-  label: string;
-  /** Con signo sobre lo que se le debe al barbero: + le corresponde / me devolvió, − ya cobró. */
-  amount: number;
-  balance: number;
+  /** Fila del cierre de mes con lo de los socios (no es un día). */
+  members: boolean;
+  /** Lo que cobró ese día en su cuenta propia (Mercado Pago). */
+  collected: number;
+  /** Lo que le corresponde cobrar (su 60 % de precio − bebida). */
+  entitled: number;
+  /** Lo que debería enviar al local: lo cobrado menos lo que le corresponde (el 40 % + la bebida). */
+  shouldSend: number;
+  /** Lo que el local le dio: efectivo que retiró, adelantos y el pago de fin de mes. */
+  received: number;
+  /** Lo que envió al local (transferencia a la cuenta del dueño o efectivo). */
+  sent: number;
+  /** Saldo acumulado: arrastre + debería enviar + lo que recibió − lo que envió. */
+  debt: number;
 }
 
 /**
- * Cuenta corriente del mes: día por día lo que le corresponde por los cortes, lo que entró en su cuenta propia
- * (Mercado Pago de Jere), el efectivo que retiró y los adelantos o devoluciones. Parte del saldo que arrastra de meses anteriores.
+ * Mayor del mes, un renglón por día con movimiento: cobró en su cuenta, debería cobrar, debería enviar (40 % + bebida), lo que recibió del local,
+ * lo que envió y saldo acumulado. Parte del saldo que arrastra de meses anteriores (`carried`, con el signo de "se le debe al barbero").
  */
-export async function barberLedger(db: Db, userId: string, month: string, carried: number): Promise<LedgerLine[]> {
+export async function barberLedger(db: Db, userId: string, month: string, carried: number): Promise<LedgerRow[]> {
   const { tariffs, rules } = await loadPricing(db);
-  const raw: { date: string; label: string; amount: number; order: number }[] = [];
+  const days = new Map<string, { collected: number; entitled: number; received: number; sent: number; members: boolean }>();
+  const day = (date: string, members = false) => {
+    let d = days.get(date);
+    if (!d) days.set(date, (d = { collected: 0, entitled: 0, received: 0, sent: 0, members }));
+    return d;
+  };
   const sales = await db.sale.findMany({ where: { userId, kind: "SERVICE", deletedAt: null, date: monthRange(month) } });
   const byDate = new Map<string, ServiceCounts>();
   for (const x of sales) {
@@ -80,28 +96,27 @@ export async function barberLedger(db: Db, userId: string, month: string, carrie
     c[x.serviceType as ServiceType] = (c[x.serviceType as ServiceType] ?? 0) + x.quantity;
     byDate.set(x.date, c);
   }
-  for (const [date, services] of byDate) {
-    const labor = computeDay({ date, tariffs, barbers: [{ barberId: userId, rules: rules.get(userId) ?? [], services }] }).labor;
-    if (labor) raw.push({ date, label: "Le corresponde por sus cortes", amount: labor, order: 0 });
-  }
+  for (const [date, services] of byDate) day(date).entitled += computeDay({ date, tariffs, barbers: [{ barberId: userId, rules: rules.get(userId) ?? [], services }] }).labor;
   const own = await db.paymentAccount.findMany({ where: { ownerUserId: userId, deletedAt: null } });
   if (own.length) {
     const lines = await db.cashCloseLine.findMany({ where: { account: { in: own.map((a) => a.key) }, close: { deletedAt: null, date: monthRange(month) } }, include: { close: true } });
-    const perDay = new Map<string, number>();
-    for (const l of lines) perDay.set(l.close.date, (perDay.get(l.close.date) ?? 0) + l.amount);
-    for (const [date, amount] of perDay) if (amount) raw.push({ date, label: "Entró en su cuenta (cobros del día)", amount: -amount, order: 1 });
+    for (const l of lines) day(l.close.date).collected += l.amount;
   }
-  for (const e of await db.cashBoxEntry.findMany({ where: { userId, kind: "RETIRO_BARBERO", deletedAt: null, date: monthRange(month) } })) raw.push({ date: e.date, label: "Retiró efectivo", amount: e.amount, order: 2 });
-  for (const x of await db.barberPayment.findMany({ where: { userId, deletedAt: null, date: monthRange(month) } }))
-    raw.push({ date: x.date, label: x.amount < 0 ? `Devolvió al local${x.note ? ` · ${x.note}` : ""}` : `Adelanto o pago${x.note ? ` · ${x.note}` : ""}`, amount: -x.amount, order: 3 });
+  for (const e of await db.cashBoxEntry.findMany({ where: { userId, kind: "RETIRO_BARBERO", deletedAt: null, date: monthRange(month) } })) day(e.date).received += -e.amount;
+  for (const x of await db.barberPayment.findMany({ where: { userId, deletedAt: null, date: monthRange(month) } })) {
+    if (x.amount >= 0) day(x.date).received += x.amount;
+    else day(x.date).sent += -x.amount;
+  }
   const labor = await membershipLaborFor(db, userId, month);
-  if (labor) raw.push({ date: `${month}-31`, label: "Le corresponde por los socios del mes", amount: labor, order: 4 });
-  raw.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.order - b.order));
-  let balance = carried;
-  return raw.map((r) => {
-    balance += r.amount;
-    return { date: r.date, label: r.label, amount: r.amount, balance };
-  });
+  if (labor) day(`${month}-31`, true).entitled += labor;
+  let debt = -carried;
+  return [...days.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([date, d]) => {
+      const shouldSend = d.collected - d.entitled;
+      debt += shouldSend + d.received - d.sent;
+      return { date, members: d.members, collected: d.collected, entitled: d.entitled, shouldSend, received: d.received, sent: d.sent, debt };
+    });
 }
 
 export interface BarberPayable extends BarberMonth {
@@ -114,7 +129,7 @@ export interface BarberPayable extends BarberMonth {
   /** Lo que falta pagarle hoy: lo arrastrado más lo del mes. Negativo = cobró de más y tiene que devolver. */
   toPay: number;
   /** Movimientos del mes con saldo corrido (cuenta corriente). */
-  ledger: LedgerLine[];
+  ledger: LedgerRow[];
 }
 export interface BarberPaymentRow { id: string; userId: string; name: string; date: string; amount: number; method: string; note: string | null }
 export interface BarberPayables {

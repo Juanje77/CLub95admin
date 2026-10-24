@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Mayor } from "../../components/BarberosPagos";
 import { DivergingBars, HBars } from "../../components/Charts";
 import PanelTabs from "../../components/PanelTabs";
 import PrintButton from "../../components/PrintButton";
@@ -251,6 +252,12 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
 
   const barberos = (
     <>
+      {payables.barbers.filter((b) => !b.selfPaid && (b.ledger.length > 0 || b.carried !== 0)).map((b) => (
+        <section key={b.userId} className="card" style={{ marginBottom: 12 }}>
+          <h2 style={{ marginTop: 0 }}>Cuenta corriente de {b.name} <Link className="sec-link noprint" href={`/barberos?mes=${month}`}>registrar pagos →</Link></h2>
+          <Mayor b={b} />
+        </section>
+      ))}
       <h2>Ranking de barberos</h2>
       <div className="card">
         <HBars ariaLabel="Generado por barbero en el mes" items={r.labor.byBarber.map((b) => ({ label: b.name, value: b.gross, hint: `${b.services} servicios` }))} />

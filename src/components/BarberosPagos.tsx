@@ -40,6 +40,66 @@ function PayForm({ b, today }: { b: BarberPayable; today: string }) {
   );
 }
 
+const cell = (n: number) => (n === 0 ? <span className="muted">–</span> : formatARS(n));
+
+/** Mayor contable del mes: una fila por día, saldo acumulado a la derecha. `Saldo` > 0 = el barbero le debe al local. */
+export function Mayor({ b }: { b: BarberPayable }) {
+  const sum = (f: (r: BarberPayable["ledger"][number]) => number) => b.ledger.reduce((a, r) => a + f(r), 0);
+  const last = b.ledger.at(-1)?.debt ?? -b.carried;
+  return (
+    <details open style={{ marginTop: 8 }}>
+      <summary><b>Cuenta corriente del mes</b> <span className="muted">(mayor, día por día)</span></summary>
+      <div style={{ overflowX: "auto" }}>
+        <table className="grid" aria-label={`Mayor de ${b.name}`}>
+          <thead>
+            <tr>
+              <th className="sticky">Fecha</th>
+              <th>Cobró en su cuenta</th>
+              <th>Debería cobrar</th>
+              <th>Debería enviar (40 % + bebida)</th>
+              <th>Recibió (retiros, adelantos, pagos)</th>
+              <th>Envió al local</th>
+              <th>Saldo acumulado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="sticky">Saldo anterior</td>
+              <td colSpan={5} />
+              <td><b>{formatARS(-b.carried)}</b></td>
+            </tr>
+            {b.ledger.map((r) => (
+              <tr key={r.date}>
+                <td className="sticky">{r.members ? "Socios (fin de mes)" : formatDate(r.date)}</td>
+                <td>{cell(r.collected)}</td>
+                <td>{cell(r.entitled)}</td>
+                <td>{cell(r.shouldSend)}</td>
+                <td>{cell(r.received)}</td>
+                <td>{cell(r.sent)}</td>
+                <td><b>{formatARS(r.debt)}</b></td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="sticky"><b>Total del mes</b></td>
+              <td><b>{formatARS(sum((r) => r.collected))}</b></td>
+              <td><b>{formatARS(sum((r) => r.entitled))}</b></td>
+              <td><b>{formatARS(sum((r) => r.shouldSend))}</b></td>
+              <td><b>{formatARS(sum((r) => r.received))}</b></td>
+              <td><b>{formatARS(sum((r) => r.sent))}</b></td>
+              <td><b>{formatARS(last)}</b></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="muted" style={{ margin: "6px 0 0" }}>
+        Saldo acumulado = saldo anterior + lo que debería enviar + lo que recibió − lo que envió. Positivo: {b.name} le debe al local; negativo: el local le debe a {b.name}. Pasa solo al mes siguiente.
+      </p>
+    </details>
+  );
+}
+
 export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { data: BarberPayables; today: string; prevMonth: string; nextMonth: string }) {
   const { pending, run, toast } = useAction();
   return (
@@ -82,21 +142,7 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
               </>
             )}
           </ul>
-          {!b.selfPaid && b.ledger.length > 0 && (
-            <details style={{ marginTop: 8 }}>
-              <summary><b>Cuenta corriente del mes</b> <span className="muted">(día por día)</span></summary>
-              <ul className="list">
-                {b.carried !== 0 && <li><span className="muted">Saldo que arrastra</span><span className="num">{formatARS(b.carried)}</span></li>}
-                {b.ledger.map((l, i) => (
-                  <li key={i}>
-                    <span>{l.label}<span className="muted"> · {l.date.endsWith("-31") && l.label.includes("socios") ? "fin de mes" : formatDate(l.date)}</span></span>
-                    <span className="num">{l.amount > 0 ? "+" : "−"}{formatARS(Math.abs(l.amount))} <span className="muted">→ {formatARS(l.balance)}</span></span>
-                  </li>
-                ))}
-              </ul>
-              <p className="muted" style={{ margin: 0 }}>El saldo corrido es lo que se le debe (si es negativo, es lo que {b.name} le debe al local).</p>
-            </details>
-          )}
+          {!b.selfPaid && (b.ledger.length > 0 || b.carried !== 0) && <Mayor b={b} />}
           {b.selfPaid ? <p className="muted" style={{ margin: 0 }}>{b.name} retira su parte de la cuenta donde entran los cortes, por eso no suma a lo que hay que pagar.</p> : <PayForm key={`${b.userId}-${b.toPay}`} b={b} today={today} />}
         </section>
       ))}

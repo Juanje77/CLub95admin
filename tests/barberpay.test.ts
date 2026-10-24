@@ -114,7 +114,9 @@ describe("cuenta corriente de un barbero que cobra en su cuenta", () => {
     await addBarberPayment(db, { actor: admin, userId: ids.jere, date: DAY, amount: 3000, method: "BANCO", direction: "DEL_BARBERO", now: NOW });
     jere = await by("Jere");
     expect(jere.toPay).toBe(11200);
-    expect(jere.ledger.map((l) => l.label.split(" ·")[0])).toEqual(["Le corresponde por sus cortes", "Entró en su cuenta (cobros del día)", "Adelanto o pago", "Devolvió al local", "Le corresponde por los socios del mes"]);
-    expect(jere.ledger.at(-1)!.balance).toBe(11200);
+    expect(jere.ledger).toEqual([
+      { date: DAY, members: false, collected: 40000, entitled: 22200, shouldSend: 17800, received: 10000, sent: 3000, debt: 24800 }, // 40 % + bebida = 17.800; adelanto 10.000; devolvió 3.000
+      { date: "2026-10-31", members: true, collected: 0, entitled: 36000, shouldSend: -36000, received: 0, sent: 0, debt: -11200 }, // los socios le corresponden: el local le debe 11.200
+    ]);
   });
 });
