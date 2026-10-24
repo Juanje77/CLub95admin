@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { copyMonthSessions, saveMemberPayment, saveMemberSessions } from "../app/actions";
+import { copyMonthSessions, removeMembers, saveMemberPayment, saveMemberSessions } from "../app/actions";
 import type { StatementRow } from "../domain/members";
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import type { MemberRow, MembersMonth } from "../services/members";
@@ -103,6 +103,11 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
   const [filter, setFilter] = useState<Filter>("todos");
   const [paying, setPaying] = useState<string | null>(null);
   const copy = useAction();
+  const del = useAction();
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [reason, setReason] = useState("");
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const pay = useAction(); // el cartel de "Cobro registrado" vive acá para que no se pierda cuando se cierra la hoja de cobro
   const toCollect = data.members.filter((m) => m.status === "PENDIENTE" || m.status === "INPAGO" || m.status === "PARCIAL");
   const noSessions = data.members.filter((m) => m.active && m.visits === 0).length;
@@ -151,6 +156,12 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
           <button type="button" className={`pill ${filter === "cobrar" ? "on" : ""}`} aria-pressed={filter === "cobrar"} onClick={() => setFilter("cobrar")}>Falta cobrar {toCollect.length}</button>
           <button type="button" className={`pill ${filter === "deben" ? "on" : ""}`} aria-pressed={filter === "deben"} onClick={() => setFilter("deben")}>Deben {debtors.length}</button>
         </div>
+        <div className="row">
+          <button type="button" className="btn" style={{ minHeight: 42 }} aria-pressed={selecting} onClick={() => { setSelecting((v) => !v); setPicked([]); setReason(""); }}>
+            {selecting ? "Cancelar selección" : "Seleccionar para eliminar"}
+          </button>
+          {selecting && <button type="button" className="btn" style={{ minHeight: 42 }} onClick={() => setPicked(shown.map((m) => m.id))}>Elegir los {shown.length} que se ven</button>}
+        </div>
         {noSessions > 0 && (
           <button type="button" className="btn" style={{ minHeight: 42 }} disabled={copy.pending} onClick={() => copy.run(() => copyMonthSessions({ month: data.month }))}>
             Cargar sesiones como el mes anterior ({noSessions})
@@ -158,13 +169,14 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
         )}
       </div>
       {copy.toast}
+      {del.toast}
       {pay.toast}
 
       <div className="gridwrap" role="region" aria-label="Cuenta mensual de socios" tabIndex={0}>
         <table className="grid cuenta">
           <thead>
             <tr>
-              <th className="sticky label">Socio</th>
+              <th className="sticky label">{selecting ? "Elegir · Socio" : "Socio"}</th>
               <th className="hm">Plan</th>
               <th>Ses.</th>
               <th className="hm">Precio</th>
@@ -183,6 +195,7 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
                 {shown.filter((m) => m.barberName === g).map((m) => (
                   <tr key={m.id} className={m.active ? "" : "inactive"}>
                     <th className="sticky label">
+                      {selecting && <input type="checkbox" aria-label={`Elegir a ${m.name}`} checked={picked.includes(m.id)} onChange={() => toggle(m.id)} style={{ marginRight: 6, width: 20, height: 20, verticalAlign: "middle" }} />}
                       <Link href={link(m.id)} scroll={false} style={{ textDecoration: "none" }}><b>{m.name}</b></Link>
                       <span className="sub">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]}{m.active ? "" : " · baja"}</span>
                     </th>
@@ -241,6 +254,20 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
         </ul>
       </div>
 
+      {selecting && picked.length > 0 && (
+        <div className="selbar" role="region" aria-label="Eliminar socios elegidos">
+          <b>{picked.length} socio{picked.length === 1 ? "" : "s"} elegido{picked.length === 1 ? "" : "s"}</b>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo (obligatorio): ej. importados de más" aria-label="Motivo de la eliminación" />
+          <button
+            type="button"
+            className="btn danger"
+            disabled={del.pending || !reason.trim()}
+            onClick={() => { if (confirm(`Se van a eliminar ${picked.length} socio${picked.length === 1 ? "" : "s"} con todo lo que tienen cargado (sesiones y cobros). No se puede deshacer. ¿Seguro?`)) del.run(() => removeMembers({ ids: picked, reason }), () => { setPicked([]); setReason(""); setSelecting(false); }); }}
+          >
+            Eliminar elegidos
+          </button>
+        </div>
+      )}
       {payingMember && (
         <QuickPay m={payingMember} today={today} pay={pay} onClose={() => setPaying(null)} onFicha={() => { setPaying(null); router.push(link(payingMember.id), { scroll: false }); }} />
       )}

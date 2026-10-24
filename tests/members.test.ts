@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, getMemberLedger, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, getMemberLedger, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
 import { getDayFigures } from "../src/services/figures";
 import { getMonthGrid } from "../src/services/grid";
 import { computeSettlement } from "../src/services/settlement";
@@ -319,5 +319,53 @@ describe("alertas de socios", () => {
     const a = await syncAlerts(db, { now: new Date("2026-10-12T15:00:00Z") });
     expect(a.find((x) => x.code === "SOCIO_CON_DEUDA")!.message).toContain("Matías Arrue tiene una deuda vencida de $ 16.500");
     expect(a.find((x) => x.code === "SOCIO_SIN_VENIR")!.message).toContain("no viene hace 38 días");
+  });
+});
+
+describe("eliminar socios", () => {
+  it("el socio y todo lo suyo dejan de contar en las pantallas y en las cuentas", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 });
+    await setAttendance(db, { actor: ale, memberId: m2, date: TODAY, present: true, now: NOW });
+    await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 66000, method: "BANCO", period: "2026-10", now: NOW });
+    await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 5000, method: "EFECTIVO", period: "2026-10", now: NOW });
+    expect((await getMembersMonth(db, "2026-10", NOW)).members).toHaveLength(2);
+
+    const r = await deleteMembers(db, { actor: ale, ids: [m1], reason: "Importado de más" });
+    expect(r.deleted).toBe(1);
+    const after = await getMembersMonth(db, "2026-10", NOW);
+    expect(after.members.map((m) => m.id)).toEqual([m2]);
+    expect(after.totals.charged).toBe(15000); // solo queda m2 (1 sesión × 15.000)
+    expect(await membershipLaborFor(db, ids.jere, "2026-10")).toBe(0);
+    expect((await membershipMonthTotals(db, "2026-10")).paid).toBe(0); // los cobros eliminados no cuentan
+    expect(await db.memberLedger.count({ where: { memberId: m1, deletedAt: null } })).toBe(0);
+    expect(await db.memberMonth.count({ where: { memberId: m1 } })).toBe(0);
+    expect((await db.member.findUnique({ where: { id: m1 } }))?.deletedAt).not.toBeNull();
+  });
+
+  it("se pueden eliminar varios a la vez, queda en la auditoría con el motivo y lo que tenía", async () => {
+    await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 10000, method: "BANCO", now: NOW });
+    const r = await deleteMembers(db, { actor: ale, ids: [m1, m2, m1], reason: "Prueba" });
+    expect(r.deleted).toBe(2);
+    expect((await getMembersMonth(db, "2026-10", NOW)).members).toHaveLength(0);
+    const logs = await db.auditLog.findMany({ where: { entity: "Member", action: "DELETE" } });
+    expect(logs).toHaveLength(2);
+    expect(logs.find((l) => l.entityId === m1)?.before).toContain('"payments":1');
+    expect(logs[0]!.after).toContain("Prueba");
+  });
+
+  it("un socio eliminado se puede volver a crear con el mismo nombre", async () => {
+    await deleteMembers(db, { actor: ale, ids: [m1], reason: "Error" });
+    const again = await createMember(db, { actor: ale, name: "Matías Arrue", serviceType: "CORTE_BARBA", userId: ids.jere, price: 16500, now: NOW });
+    expect(again.id).not.toBe(m1);
+    expect((await getMembersMonth(db, "2026-10", NOW)).members.filter((m) => m.name === "Matías Arrue")).toHaveLength(1);
+  });
+
+  it("pide motivo, al menos un socio y permisos; ignora los que no existen", async () => {
+    expect(await code(deleteMembers(db, { actor: ale, ids: [m1], reason: " " }))).toBe("MOTIVO_OBLIGATORIO");
+    expect(await code(deleteMembers(db, { actor: ale, ids: [], reason: "x" }))).toBe("SIN_SOCIOS");
+    expect(await code(deleteMembers(db, { actor: lucio, ids: [m1], reason: "x" }))).toBe("SOLO_ADMIN");
+    expect(await code(deleteMembers(db, { actor: ale, ids: ["no-existe"], reason: "x" }))).toBe("SOCIO_INEXISTENTE");
+    await deleteMembers(db, { actor: ale, ids: [m1], reason: "x" });
+    expect(await code(deleteMembers(db, { actor: ale, ids: [m1], reason: "x" }))).toBe("SOCIO_INEXISTENTE"); // ya eliminado
   });
 });

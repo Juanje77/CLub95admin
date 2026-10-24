@@ -128,6 +128,34 @@ export async function addMemberPrice(db: PrismaClient, p: { actor: Actor; member
   return row;
 }
 
+/**
+ * Elimina socios (por ejemplo, los que se importaron de más). Se borran de todas las pantallas y cuentas: el socio, sus cobros, su asistencia
+ * y sus sesiones cargadas dejan de contar. Queda registrado en la auditoría quién lo hizo, cuándo y por qué (con lo que tenía cargado).
+ */
+export async function deleteMembers(db: PrismaClient, p: { actor: Actor; ids: string[]; reason: string; now?: Date }) {
+  requireAdmin(p.actor);
+  if (!p.reason.trim()) throw new DomainError("MOTIVO_OBLIGATORIO", "Indicá el motivo.");
+  const ids = [...new Set(p.ids)];
+  if (ids.length === 0) throw new DomainError("SIN_SOCIOS", "Elegí al menos un socio.");
+  if (ids.length > 300) throw new DomainError("DEMASIADOS", "Son demasiados socios a la vez (máximo 300).");
+  const members = await db.member.findMany({ where: { id: { in: ids }, deletedAt: null } });
+  if (members.length === 0) throw new DomainError("SOCIO_INEXISTENTE", "Esos socios no existen.");
+  const at = p.now ?? new Date();
+  await db.$transaction(async (tx) => {
+    for (const m of members) {
+      const payments = await tx.memberLedger.count({ where: { memberId: m.id, deletedAt: null, kind: "PAGO" } });
+      const attendance = await tx.attendance.count({ where: { memberId: m.id, deletedAt: null } });
+      const months = await tx.memberMonth.count({ where: { memberId: m.id } });
+      await tx.memberLedger.updateMany({ where: { memberId: m.id, deletedAt: null }, data: { deletedAt: at } });
+      await tx.attendance.updateMany({ where: { memberId: m.id, deletedAt: null }, data: { deletedAt: at } });
+      await tx.memberMonth.deleteMany({ where: { memberId: m.id } });
+      await tx.member.update({ where: { id: m.id }, data: { deletedAt: at, active: false } });
+      await audit(tx, { userId: p.actor.id, entity: "Member", entityId: m.id, action: "DELETE", before: { name: m.name, plan: m.plan, serviceType: m.serviceType, payments, attendance, monthsWithSessions: months }, after: { reason: p.reason.trim() } });
+    }
+  });
+  return { deleted: members.length };
+}
+
 // --- Asistencia -----------------------------------------------------------------------------------------------------------------
 // Tildar a un socio el día que viene. Cada asistencia se cobra al precio vigente y suma al barbero que lo atendió.
 

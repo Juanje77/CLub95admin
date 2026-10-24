@@ -109,6 +109,7 @@ Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en 
 - **Cobrar en dos toques:** el botón **Cobrar** de cada fila abre una hoja con el monto ya propuesto (lo que debe) y el medio (transferencia o efectivo); la fecha es hoy y el mes se imputa solo. Para otra fecha, otro mes o una nota, el enlace de abajo abre la ficha del socio, donde el formulario de cobro está arriba de todo.
 - **Armar el mes:** **Cargar sesiones como el mes anterior** completa a los socios activos que todavía no tienen sesiones; después se corrigen las que cambien. No pisa lo ya cargado ni toca a los dados de baja.
 - **Buscar y filtrar:** buscador por nombre y filtros **Todos / Falta cobrar / Deben**.
+- **Eliminar socios:** desde la ficha ("Eliminar este socio") o, para varios a la vez (por ejemplo, los importados de más), con **Seleccionar para eliminar** en la lista: se eligen, se escribe el motivo y se eliminan. Se borra el socio con todo lo que tiene cargado (sesiones, cobros y asistencia) y deja de contar en todas las pantallas y cuentas; no se puede deshacer, pero queda en la auditoría con el motivo y lo que tenía. Si solo dejó de venir, conviene **darlo de baja**. Se puede volver a crear con el mismo nombre.
 - La pestaña **Asistencia por día** queda como tercera opción: no hace falta para el trabajo mensual.
 
 ### Efectivo y cuentas de socios

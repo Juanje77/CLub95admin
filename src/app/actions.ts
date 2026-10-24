@@ -13,7 +13,7 @@ import { DomainError, isAdmin } from "../services/common";
 import { addBarberPayment, voidBarberPayment } from "../services/barberpay";
 import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
-import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
@@ -296,6 +296,13 @@ export async function saveMemberSessions(p: { memberId: string; month: string; s
   return run(async (actor) => {
     await setMemberSessions(db, { actor, ...p });
     return "Sesiones guardadas.";
+  });
+}
+
+export async function removeMembers(p: { ids: string[]; reason: string }) {
+  return run(async (actor) => {
+    const r = await deleteMembers(db, { actor, ...p });
+    return r.deleted === 1 ? "Socio eliminado." : `${r.deleted} socios eliminados.`;
   });
 }
 

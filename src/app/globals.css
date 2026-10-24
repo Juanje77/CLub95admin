@@ -245,3 +245,7 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
 .drawer-back.sheet .drawer { max-width: 520px; border-radius: var(--radius) var(--radius) 0 0; padding: 14px 16px 22px; }
 @media (min-width: 700px) { .drawer-back.sheet { align-items: center; } .drawer-back.sheet .drawer { border-radius: var(--radius); } }
 .linklike { all: unset; cursor: pointer; color: var(--ink); text-decoration: underline; font-size: .9rem; }
+
+/* Socios: barra para eliminar los elegidos */
+.selbar { position: fixed; left: 8px; right: 8px; bottom: 76px; z-index: 35; display: grid; gap: 8px; padding: 12px; border-radius: var(--radius); background: var(--card); border: 2px solid var(--err); box-shadow: 0 8px 28px rgba(0,0,0,.3); max-width: 640px; margin: 0 auto; }
+.selbar input { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--bg); color: var(--ink); font-size: 1rem; box-sizing: border-box; width: 100%; }

@@ -116,7 +116,7 @@ function NewExpenseForm({ concepts, topConcepts, today, preset }: { concepts: Co
   );
 }
 
-function ExpenseRowView({ r, concepts, today }: { r: ExpenseListRow; concepts: ConceptView[]; today: string }) {
+function ExpenseRowView({ r, concepts, today, onRemove }: { r: ExpenseListRow; concepts: ConceptView[]; today: string; onRemove: (id: string) => void }) {
   const [date, setDate] = useState(r.date);
   const [conceptId, setConceptId] = useState(r.conceptId);
   const [amount, setAmount] = useState(String(r.amount));
@@ -140,7 +140,7 @@ function ExpenseRowView({ r, concepts, today }: { r: ExpenseListRow; concepts: C
           <label className="field"><span>Descripción</span><input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
           <div className="row">
             <button className="btn primary" type="submit" disabled={pending || num(amount) <= 0}>Guardar cambios</button>
-            <button className="btn danger" type="button" disabled={pending} onClick={() => { if (confirm("¿Borrar este gasto? Queda registrado quién lo borró.")) run(() => removeExpense({ id: r.id })); }}>Borrar</button>
+            <button className="btn danger" type="button" disabled={pending} onClick={() => { if (confirm("¿Borrar este gasto? Queda registrado quién lo borró.")) onRemove(r.id); }}>Borrar</button>
           </div>
         </form>
         {toast}
@@ -226,7 +226,7 @@ export default function GastosClient(p: Props) {
         </select>
       </label>
       <ul className="list card" style={{ padding: "4px 14px" }}>
-        {p.rows.map((r) => <ExpenseRowView key={r.id} r={r} concepts={p.concepts} today={p.today} />)}
+        {p.rows.map((r) => <ExpenseRowView key={r.id} r={r} concepts={p.concepts} today={p.today} onRemove={(id) => run(() => removeExpense({ id }))} />)}
         {p.rows.length === 0 && <li className="muted">No hay gastos cargados {p.conceptFilter ? "de ese concepto " : ""}este mes.</li>}
       </ul>
 

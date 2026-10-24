@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { editMember, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
+import { editMember, removeMembers, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
 import { formatARS, formatDate, monthLabel, shiftMonth } from "../domain/money";
 import type { StatementRow } from "../domain/members";
 import type { MemberRow, MembersMonth } from "../services/members";
@@ -68,6 +68,9 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
   const [userId, setUserId] = useState(m.userId ?? "");
   const [type, setType] = useState(m.serviceType);
   const [plan, setPlan] = useState(m.plan);
+  const [delReason, setDelReason] = useState("");
+  const router = useRouter();
+  const sp = useSearchParams();
   const [timing, setTiming] = useState(m.payTiming);
   const [phone, setPhone] = useState(m.phone ?? "");
   const payMonth = payDate.slice(0, 7);
@@ -183,6 +186,12 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
             <button className="btn danger" type="button" disabled={pending} onClick={() => run(() => editMember({ id: m.id, name: m.name, plan: m.plan, payTiming: m.payTiming, userId: m.userId, serviceType: m.serviceType, phone: m.phone ?? "", active: !m.active }))}>{m.active ? "Dar de baja" : "Reactivar"}</button>
           </div>
         </form>
+      </details>
+      <details style={{ marginTop: 10 }}>
+        <summary className="muted">Eliminar este socio</summary>
+        <p className="muted" style={{ margin: "6px 0" }}>Se elimina el socio con todo lo que tiene cargado (sesiones, cobros y asistencia) y deja de contar en las cuentas. No se puede deshacer; queda anotado en la auditoría. Si solo dejó de venir, mejor <b>darlo de baja</b>.</p>
+        <label className="field"><span>Motivo de la eliminación (obligatorio)</span><input value={delReason} onChange={(e) => setDelReason(e.target.value)} placeholder="Ej.: se cargó por error" /></label>
+        <button className="btn danger" type="button" disabled={pending || !delReason.trim()} onClick={() => { if (confirm(`¿Eliminar a ${m.name} con todo lo que tiene cargado? No se puede deshacer.`)) run(() => removeMembers({ ids: [m.id], reason: delReason }), () => { const q = new URLSearchParams(sp.toString()); q.delete("socio"); router.push(`/socios?${q}`, { scroll: false }); }); }}>Eliminar a {m.name}</button>
       </details>
       {toast}
     </section>

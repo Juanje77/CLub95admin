@@ -396,6 +396,24 @@ await page.waitForFunction(() => /Lucio/.test([...document.querySelectorAll("ul.
 check(true, "el pago a Lucio queda registrado y baja lo que falta");
 await shot("a-pagar-barberos");
 
+// 9h. Eliminar socios (por ejemplo, los importados de más): elegir varios y borrarlos con motivo
+await page.getByRole("link", { name: "Socios", exact: true }).click();
+await page.getByRole("region", { name: "Cuenta mensual de socios" }).waitFor();
+await page.getByLabel("Buscar socio").fill("importado");
+await page.getByRole("button", { name: "Seleccionar para eliminar" }).click();
+await page.getByRole("button", { name: /^Elegir los \d+ que se ven/ }).click();
+const selbar = page.getByRole("region", { name: "Eliminar socios elegidos" });
+await selbar.waitFor();
+check(/2 socios elegidos/.test(await selbar.innerText()), "se eligen los 2 socios importados para eliminar");
+check(await selbar.getByRole("button", { name: "Eliminar elegidos" }).isDisabled(), "no deja eliminar sin motivo");
+await selbar.getByLabel("Motivo de la eliminación").fill("Importados de prueba");
+await selbar.getByRole("button", { name: "Eliminar elegidos" }).click();
+await page.getByText("2 socios eliminados.").first().waitFor();
+await page.getByLabel("Buscar socio").fill("importado");
+await page.waitForFunction(() => /Ningún socio coincide/.test(document.querySelector("table.cuenta")?.textContent ?? ""));
+check(true, "los socios eliminados desaparecen de la lista");
+await page.getByLabel("Buscar socio").fill("");
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();
