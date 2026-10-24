@@ -404,7 +404,7 @@ check(await noHScroll(), "A pagar a los barberos no desborda en celular");
 await page.setViewportSize({ width: 1280, height: 800 });
 await page.reload();
 await page.getByRole("heading", { name: /A pagar · octubre 2026/i }).waitFor();
-check(await noHScroll(), "A pagar a los barberos no desborda en computadora (las tarjetas en dos columnas respetan el ancho)");
+check(await noHScroll(), "A pagar a los barberos no desborda en computadora (las tarjetas respetan el ancho)");
 const cards = await page.locator("section.card[aria-label^='Barbero']").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
 check(cards.every((r) => r <= 1281), "las tarjetas de barberos caben en la pantalla");
 await page.setViewportSize({ width: 390, height: 844 });

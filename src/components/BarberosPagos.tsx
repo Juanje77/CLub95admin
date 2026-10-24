@@ -119,7 +119,7 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
         </p>
       </section>
 
-      <div className="cols" style={{ marginTop: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 12, marginTop: 12 }}>
       {data.barbers.map((b) => (
         <section key={b.userId} className="card" aria-label={`Barbero ${b.name}`}>
           <div className="row spread">
