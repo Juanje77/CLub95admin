@@ -87,6 +87,32 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
         <span>Queda para el local</span><b className="num">{formatARS(m.localShare)}</b>
       </div>
 
+      <details open>
+        <summary><b>Registrar un cobro</b></summary>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => saveMemberPayment({ memberId: m.id, date: payDate, amount: num(payAmount), method: payMethod, period: payPeriod || undefined, note: payNote }), () => { setPayAmount(""); setPayNote(""); setPayPeriod(""); }); }}>
+          <label className="field"><span>Monto ($){m.balance > 0 ? ` · saldo ${formatARS(m.balance)}` : ""}</span><input inputMode="numeric" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder={m.balance > 0 ? String(m.balance) : "0"} /></label>
+          <div className="seg" role="group" aria-label="Medio de pago" style={{ marginBottom: 8 }}>
+            <button type="button" aria-pressed={payMethod === "BANCO"} onClick={() => setPayMethod("BANCO")}>Transferencia</button>
+            <button type="button" aria-pressed={payMethod === "EFECTIVO"} onClick={() => setPayMethod("EFECTIVO")}>Efectivo</button>
+          </div>
+          <details>
+            <summary className="muted">Otra fecha, mes al que corresponde o nota</summary>
+            <label className="field"><span>Fecha</span><input type="date" value={payDate} max={today} onChange={(e) => setPayDate(e.target.value)} /></label>
+            <label className="field">
+              <span>Corresponde a</span>
+              <select value={payPeriod} onChange={(e) => setPayPeriod(e.target.value)}>
+                <option value="">Automático (el mes más viejo que debe)</option>
+                <option value={shiftMonth(payMonth, -1)}>Mes anterior · {monthLabel(shiftMonth(payMonth, -1))}</option>
+                <option value={payMonth}>Mes actual · {monthLabel(payMonth)}</option>
+                <option value={shiftMonth(payMonth, 1)}>Mes siguiente · {monthLabel(shiftMonth(payMonth, 1))}</option>
+              </select>
+            </label>
+            <label className="field"><span>Nota (opcional)</span><input value={payNote} onChange={(e) => setPayNote(e.target.value)} /></label>
+          </details>
+          <button className="btn primary" type="submit" disabled={pending || num(payAmount) <= 0}>Registrar cobro</button>
+        </form>
+      </details>
+
       <h2>Cuenta corriente mes a mes</h2>
       <div className="gridwrap" style={{ maxHeight: "none" }}>
         <table className="grid cc">
@@ -125,25 +151,6 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
         {ledger.length === 0 && <li className="muted">Sin cobros ni ajustes.</li>}
       </ul>
 
-      <details open>
-        <summary><b>Registrar un cobro</b></summary>
-        <form onSubmit={(e) => { e.preventDefault(); run(() => saveMemberPayment({ memberId: m.id, date: payDate, amount: num(payAmount), method: payMethod, period: payPeriod || undefined, note: payNote }), () => { setPayAmount(""); setPayNote(""); setPayPeriod(""); }); }}>
-          <label className="field"><span>Fecha</span><input type="date" value={payDate} max={today} onChange={(e) => setPayDate(e.target.value)} /></label>
-          <label className="field"><span>Monto ($)</span><input inputMode="numeric" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} /></label>
-          <label className="field"><span>Medio</span><select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}><option value="BANCO">Transferencia / Mercado Pago</option><option value="EFECTIVO">Efectivo</option></select></label>
-          <label className="field">
-            <span>Corresponde a</span>
-            <select value={payPeriod} onChange={(e) => setPayPeriod(e.target.value)}>
-              <option value="">Automático (el mes más viejo que debe)</option>
-              <option value={shiftMonth(payMonth, -1)}>Mes anterior · {monthLabel(shiftMonth(payMonth, -1))}</option>
-              <option value={payMonth}>Mes actual · {monthLabel(payMonth)}</option>
-              <option value={shiftMonth(payMonth, 1)}>Mes siguiente · {monthLabel(shiftMonth(payMonth, 1))}</option>
-            </select>
-          </label>
-          <label className="field"><span>Nota (opcional)</span><input value={payNote} onChange={(e) => setPayNote(e.target.value)} /></label>
-          <button className="btn primary" type="submit" disabled={pending || num(payAmount) <= 0}>Registrar cobro</button>
-        </form>
-      </details>
       <details>
         <summary><b>Ajuste manual</b> <span className="muted">(+ suma deuda, − la baja)</span></summary>
         <form onSubmit={(e) => { e.preventDefault(); run(() => saveMemberAdjustment({ memberId: m.id, date: today, amount: Number(adjAmount.replace(/[^\d-]/g, "")), reason: adjReason }), () => { setAdjAmount(""); setAdjReason(""); }); }}>
@@ -337,8 +344,8 @@ export type SociosView = "cuenta" | "asistencia" | "cajas";
 export function ViewSwitch({ month, current }: { month: string; current: SociosView }) {
   const tabs: { id: SociosView; label: string; href: string }[] = [
     { id: "cuenta", label: "Cuenta mensual", href: `/socios?mes=${month}` },
-    { id: "asistencia", label: "Asistencia", href: `/socios?mes=${month}&vista=asistencia` },
     { id: "cajas", label: "Efectivo y cuentas", href: `/socios?mes=${month}&vista=cajas` },
+    { id: "asistencia", label: "Asistencia", href: `/socios?mes=${month}&vista=asistencia` },
   ];
   return (
     <nav className="seg" aria-label="Vista de socios" style={{ margin: "6px 0" }}>

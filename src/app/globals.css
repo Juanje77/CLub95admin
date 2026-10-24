@@ -216,6 +216,7 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
   .monthnav h1 { font-size: 1.02rem; }
   .drawer-back { padding: 0; }
   .drawer { border-radius: 0; min-height: 100%; max-width: none; }
+  .drawer-back.sheet .drawer { min-height: 0; border-radius: var(--radius) var(--radius) 0 0; }
 }
 
 /* Panel del dueño: pestañas por tema */
@@ -234,3 +235,13 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
 @media (min-width: 760px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
 .kpis .card { padding: 10px; }
 .sec-link { font-size: .85rem; font-weight: 600; }
+
+/* Socios: buscador, filtros y cobro rápido */
+.toolbar { display: grid; gap: 8px; margin: 8px 0; }
+.toolbar .search { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: var(--radius); padding: 0 14px; background: var(--card); color: var(--ink); font-size: 1rem; box-sizing: border-box; }
+.toolbar .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.toolbar .pill { min-height: 38px; padding: 4px 11px; font-size: .84rem; }
+.drawer-back.sheet { align-items: flex-end; padding: 0; }
+.drawer-back.sheet .drawer { max-width: 520px; border-radius: var(--radius) var(--radius) 0 0; padding: 14px 16px 22px; }
+@media (min-width: 700px) { .drawer-back.sheet { align-items: center; } .drawer-back.sheet .drawer { border-radius: var(--radius); } }
+.linklike { all: unset; cursor: pointer; color: var(--ink); text-decoration: underline; font-size: .9rem; }

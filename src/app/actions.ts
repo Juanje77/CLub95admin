@@ -12,7 +12,7 @@ import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setPr
 import { DomainError, isAdmin } from "../services/common";
 import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
-import { addMemberPrice, adjustMember, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
@@ -295,6 +295,15 @@ export async function saveMemberSessions(p: { memberId: string; month: string; s
   return run(async (actor) => {
     await setMemberSessions(db, { actor, ...p });
     return "Sesiones guardadas.";
+  });
+}
+
+export async function copyMonthSessions(p: { month: string }) {
+  return run(async (actor) => {
+    const r = await copySessionsFromPreviousMonth(db, { actor, month: p.month });
+    return r.copied === 0
+      ? "No había socios para completar: todos ya tienen sesiones este mes o no vinieron el mes anterior."
+      : `Se cargaron las sesiones de ${r.copied} socio${r.copied === 1 ? "" : "s"} como el mes anterior. Corregí las que cambien.`;
   });
 }
 

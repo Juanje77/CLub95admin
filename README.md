@@ -95,6 +95,13 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 
 Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en efectivo), lo que **ingresó** (el "dinero ingresado" de cada día en la planilla) y la **diferencia**, que es lo que se pagó en efectivo o todavía no se cargó. En la cuenta de Ale también se ve lo que sale (el pago a Lucio y el retiro de Ale) y lo que queda. El recorrido se puede cambiar en `Setting` `accountRouting` (lista de `{ key, who, owner, barbers, memberTransfers, drinks, products, pays }`).
 
+### Gestión diaria de socios (lo más rápido)
+
+- **Cobrar en dos toques:** el botón **Cobrar** de cada fila abre una hoja con el monto ya propuesto (lo que debe) y el medio (transferencia o efectivo); la fecha es hoy y el mes se imputa solo. Para otra fecha, otro mes o una nota, el enlace de abajo abre la ficha del socio, donde el formulario de cobro está arriba de todo.
+- **Armar el mes:** **Cargar sesiones como el mes anterior** completa a los socios activos que todavía no tienen sesiones; después se corrigen las que cambien. No pisa lo ya cargado ni toca a los dados de baja.
+- **Buscar y filtrar:** buscador por nombre y filtros **Todos / Falta cobrar / Deben**.
+- La pestaña **Asistencia por día** queda como tercera opción: no hace falta para el trabajo mensual.
+
 ### Efectivo y cuentas de socios
 
 **Socios → Efectivo y cuentas** (solo admin/dueño). Tres cuentas que se acumulan desde el primer dato y se llevan aparte de la caja diaria:

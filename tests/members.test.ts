@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addMemberPrice, adjustMember, createMember, getMemberLedger, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, getMemberLedger, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
 import { getDayFigures } from "../src/services/figures";
 import { getMonthGrid } from "../src/services/grid";
 import { computeSettlement } from "../src/services/settlement";
@@ -175,6 +175,36 @@ describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () 
     expect(await membershipLaborFor(db, ids.jere, "2026-10")).toBe(36000);
     const t = await membershipMonthTotals(db, "2026-10");
     expect(t).toMatchObject({ visits: 4, income: 66000, drinkCost: 4 * 1500 });
+  });
+});
+
+describe("armar el mes con las sesiones del mes anterior", () => {
+  it("completa a los socios sin sesiones con las del mes anterior, sin pisar lo ya cargado", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-09", sessions: 4 });
+    await setMemberSessions(db, { actor: ale, memberId: m2, month: "2026-09", sessions: 3 });
+    await setMemberSessions(db, { actor: ale, memberId: m2, month: "2026-10", sessions: 2 }); // ya cargado: no se pisa
+    const dormido = (await createMember(db, { actor: ale, name: "De baja", serviceType: "CORTE", userId: null, price: 16000, startDate: "2026-09-01", now: NOW })).id;
+    await setMemberSessions(db, { actor: ale, memberId: dormido, month: "2026-09", sessions: 4 });
+    await updateMember(db, { actor: ale, id: dormido, active: false }); // dado de baja: no se completa
+    const r = await copySessionsFromPreviousMonth(db, { actor: ale, month: "2026-10" });
+    expect(r).toEqual({ copied: 1, from: "2026-09" });
+    expect((await row(m1)).visits).toBe(4);
+    expect((await row(m2)).visits).toBe(2);
+    expect(await db.memberMonth.count({ where: { memberId: dormido, month: "2026-10" } })).toBe(0);
+  });
+  it("se puede repetir sin cambiar nada, respeta la asistencia del mes y pide permisos", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-09", sessions: 4 });
+    await setMemberSessions(db, { actor: ale, memberId: m2, month: "2026-09", sessions: 4 });
+    await setAttendance(db, { actor: ale, memberId: m2, date: "2026-10-02", present: true, now: NOW }); // ya viene por asistencia
+    expect((await copySessionsFromPreviousMonth(db, { actor: ale, month: "2026-10" })).copied).toBe(1);
+    expect((await copySessionsFromPreviousMonth(db, { actor: ale, month: "2026-10" })).copied).toBe(0);
+    expect((await row(m2)).visits).toBe(1);
+    expect(await code(copySessionsFromPreviousMonth(db, { actor: lucio, month: "2026-10" }))).toBe("SOLO_ADMIN");
+    expect(await code(copySessionsFromPreviousMonth(db, { actor: ale, month: "2026-13" }))).toBe("MES_INVALIDO");
+  });
+  it("en enero toma diciembre del año anterior", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2025-12", sessions: 5 });
+    expect(await copySessionsFromPreviousMonth(db, { actor: ale, month: "2026-01" })).toEqual({ copied: 1, from: "2025-12" });
   });
 });
 

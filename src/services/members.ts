@@ -187,6 +187,29 @@ export async function setMemberSessions(db: PrismaClient, p: { actor: Actor; mem
   }
 }
 
+/**
+ * Arma el mes: a cada socio activo que todavía no tiene sesiones en `month` (ni cargadas ni por asistencia) le pone las sesiones que tuvo el mes anterior.
+ * Después se corrigen a mano las que cambien. No pisa nada de lo ya cargado.
+ */
+export async function copySessionsFromPreviousMonth(db: PrismaClient, p: { actor: Actor; month: string }) {
+  requireAdmin(p.actor);
+  if (!MONTH_RE.test(p.month)) throw new DomainError("MES_INVALIDO", "El mes es inválido.");
+  const [y, m] = p.month.split("-").map(Number) as [number, number];
+  const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  const { members, data } = await loadMembers(db);
+  let copied = 0;
+  for (const mem of members) {
+    if (!mem.active) continue;
+    const d = data.get(mem.id)!;
+    if (d.overrides.has(p.month) || d.attendance.some((a) => a.date.startsWith(p.month))) continue;
+    const sessions = linesFor(d, prev).reduce((s, l) => s + l.qty, 0);
+    if (sessions <= 0) continue;
+    await setMemberSessions(db, { actor: p.actor, memberId: mem.id, month: p.month, sessions });
+    copied++;
+  }
+  return { copied, from: prev };
+}
+
 // --- Cuenta corriente: cobros y ajustes ----------------------------------------------------------------------------------------------
 
 /**

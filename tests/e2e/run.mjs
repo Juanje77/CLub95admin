@@ -160,7 +160,7 @@ check(true, "2 visitas × $ 16.500 = $ 33.000 a cobrar");
 await page.getByRole("link", { name: "Matías Arrue", exact: true }).click();
 await page.getByRole("region", { name: /Cuenta de Matías Arrue/ }).waitFor();
 const panel = page.getByRole("region", { name: /Cuenta de Matías Arrue/ });
-await panel.getByLabel("Monto ($)", { exact: true }).first().fill("20000");
+await panel.getByLabel(/^Monto \(\$\)/).first().fill("20000");
 await panel.getByRole("button", { name: "Registrar cobro" }).click();
 await panel.getByText("Debe $ 13.000").waitFor();
 check(true, "un cobro baja la deuda: debe $ 13.000");
@@ -330,6 +330,25 @@ await page.getByRole("button", { name: "Leer la planilla" }).click();
 await page.getByRole("heading", { name: "Qué se va a cargar" }).waitFor();
 check(/Socios nuevos\s*0/.test(await page.locator("body").innerText()), "repetir la carga no duplica socios");
 await page.getByRole("link", { name: "Volver a Socios" }).click();
+
+// 9d2. Gestión simple de socios: buscar, filtrar y cobrar en dos toques
+await page.getByRole("region", { name: "Cuenta mensual de socios" }).waitFor();
+await page.getByLabel("Buscar socio").fill("importado");
+await page.waitForFunction(() => !/Matías Arrue/.test(document.querySelector("table.cuenta")?.textContent ?? "") && /Importado Uno/.test(document.querySelector("table.cuenta")?.textContent ?? ""));
+check(true, "el buscador deja solo a los socios que coinciden");
+await page.getByRole("button", { name: /^Deben/ }).click();
+check(/Importado Uno/.test(await page.locator("table.cuenta").innerText()), "el filtro 'Deben' muestra al socio con deuda");
+await page.getByRole("button", { name: "Cobrar a Importado Uno" }).click();
+const quick = page.getByRole("dialog", { name: "Cobrar a Importado Uno" });
+await quick.waitFor();
+check((await quick.getByLabel("Monto ($)").inputValue()) === "65000", "el cobro rápido propone lo que debe ($ 65.000)");
+await quick.getByRole("button", { name: /^Cobrar/ }).click();
+await page.getByText("Cobro registrado.").first().waitFor();
+await page.getByRole("dialog").waitFor({ state: "detached" });
+await page.waitForFunction(() => /Importado Uno/.test(document.querySelector("table.cuenta")?.textContent ?? "") === false);
+check(true, "cobrar toma dos toques y el socio sale de 'Deben'");
+await page.getByLabel("Buscar socio").fill("");
+await page.getByRole("button", { name: /^Todos/ }).click();
 
 // 9e. Efectivo y cuentas de socios: efectivo a rendir, bebida y ganancia (aparte del día a día)
 await page.getByRole("link", { name: "Efectivo y cuentas" }).click();
