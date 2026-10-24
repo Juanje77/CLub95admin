@@ -119,8 +119,9 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
         </p>
       </section>
 
+      <div className="cols" style={{ marginTop: 12 }}>
       {data.barbers.map((b) => (
-        <section key={b.userId} className="card" aria-label={`Barbero ${b.name}`} style={{ marginTop: 12 }}>
+        <section key={b.userId} className="card" aria-label={`Barbero ${b.name}`}>
           <div className="row spread">
             <h2 style={{ margin: 0 }}>{b.name}</h2>
             {b.selfPaid ? <span className="chip">Retira de su cuenta</span> : <span className={`chip ${b.toPay > 0 ? "err" : b.toPay < 0 ? "warn" : "ok"}`}>{b.toPay > 0 ? "Falta pagarle" : b.toPay < 0 ? "Cobró de más" : "Al día ✓"}</span>}
@@ -146,6 +147,7 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
           {b.selfPaid ? <p className="muted" style={{ margin: 0 }}>{b.name} retira su parte de la cuenta donde entran los cortes, por eso no suma a lo que hay que pagar.</p> : <PayForm key={`${b.userId}-${b.toPay}`} b={b} today={today} />}
         </section>
       ))}
+      </div>
 
       <h2>Pagos y devoluciones de este mes</h2>
       <ul className="list card" style={{ padding: "4px 14px" }}>

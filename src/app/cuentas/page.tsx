@@ -27,6 +27,7 @@ export default async function CuentasPage({ searchParams }: { searchParams: Prom
         en la planilla. La diferencia es lo que se pagó en efectivo o todavía no se cargó.
       </p>
 
+      <div className="cols" style={{ marginTop: 12 }}>
       {data.accounts.map((a) => (
         <section key={a.key} className="card" aria-label={`Cuenta de ${a.who}`} style={{ marginTop: 12 }}>
           <div className="muted">Cuenta de {a.who} · {a.name}</div>
@@ -55,6 +56,7 @@ export default async function CuentasPage({ searchParams }: { searchParams: Prom
           )}
         </section>
       ))}
+      </div>
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row spread"><span>Efectivo ingresado en el mes</span><b className="num">{formatARS(data.cashDeclared)}</b></div>

@@ -74,6 +74,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <div className="card"><div className="muted">Resultado final</div><div className={`num big2 ${r.result >= 0 ? "okc" : "errc"}`}>{r.result >= 0 ? "▲ " : "▼ "}{signed(r.result)}</div><div className="delta">{r.result >= 0 ? "ganancia del mes" : "pérdida del mes"}</div></div>
       </div>
 
+      <div className="cols">
+      <div>
       <h2>A mirar</h2>
       <div className="attn" role="list">
         {attention.map((a) => (
@@ -83,7 +85,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           </a>
         ))}
       </div>
+      </div>
 
+      <div>
       <h2>Resultado del mes</h2>
       <div className="card">
         <table className="stmt">
@@ -121,6 +125,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <p className="muted" style={{ marginBottom: 0 }}>
           Las compras de mercadería ({formatARS(r.expenses.replenishment)}) no restan acá: su costo ya está en "Costos" por lo consumido. Las membresías se cuentan por visita (devengado).
         </p>
+      </div>
+      </div>
       </div>
     </>
   );
@@ -308,7 +314,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   );
 
   return (
-    <Shell user={user} wide>
+    <Shell user={user}>
       <div className="monthnav">
         <Link className="btn noprint" href={`/panel?mes=${shiftMonth(month, -1)}`} aria-label="Mes anterior">←</Link>
         <h1 style={{ textTransform: "capitalize" }}>Panel · {monthLabel(month)}</h1>

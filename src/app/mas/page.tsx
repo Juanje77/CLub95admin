@@ -19,7 +19,7 @@ export default async function MasPage() {
   return (
     <Shell user={user}>
       <h1>Más</h1>
-      <div className="grid" style={{ marginTop: 12 }}>
+      <div className="menu-grid">
         {ITEMS.map((i) => (
           <Link key={i.href} href={i.href} className="big alt" style={{ textDecoration: "none" }}>
             {i.title}
