@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addBarberPayment, getBarberPayables, voidBarberPayment } from "../src/services/barberpay";
+import { addBarberPayment, getBarberPayables, setBarberOpening, voidBarberPayment } from "../src/services/barberpay";
 import { setDeclared, setServiceCount } from "../src/services/grid";
 import { createMember, registerPayment, setMemberSessions } from "../src/services/members";
 import { DomainError, type Actor } from "../src/services/common";
@@ -130,3 +130,34 @@ describe("rendimiento: el saldo arrastrado no repite lecturas por mes", () => {
     expect(jere.carried).toBe(58200); // lo de octubre 2026 sigue sin pagarse
   });
 });
+
+describe("saldo inicial de la cuenta corriente", () => {
+  it("se puede arrancar un mes en cero sin arrastrar lo anterior, y quitarlo vuelve al historial", async () => {
+    const carriedFrom = async (m: string) => (await by("Jere", m)).carried;
+    expect(await carriedFrom("2026-11")).toBe(58200); // octubre quedó sin pagar
+    await setBarberOpening(db, { actor: admin, userId: ids.jere, month: "2026-11", debt: 0, note: "arranca de cero" });
+    expect(await carriedFrom("2026-11")).toBe(0);
+    expect((await by("Jere", "2026-11")).opening).toMatchObject({ month: "2026-11", debt: 0 });
+    // Un saldo con deuda de Jere hacia el local: positivo = Jere debe
+    await setBarberOpening(db, { actor: admin, userId: ids.jere, month: "2026-11", debt: 20000 });
+    expect(await carriedFrom("2026-11")).toBe(-20000);
+    expect((await by("Jere", "2026-11")).toPay).toBe(-20000);
+    expect((await by("Jere", "2026-11")).ledger.length).toBe(0);
+    // Los meses siguientes parten de ese saldo
+    expect(await carriedFrom("2026-12")).toBe(-20000);
+    // Los demás barberos no cambian
+    expect(await carriedFrom2("Lucio")).toBe(30600);
+    await setBarberOpening(db, { actor: admin, userId: ids.jere, month: "2026-11", debt: null });
+    expect(await carriedFrom("2026-11")).toBe(58200);
+  });
+
+  it("solo admin, mes y monto válidos, y queda auditado", async () => {
+    expect(await code(setBarberOpening(db, { actor: lucio, userId: ids.jere, month: "2026-10", debt: 0 }))).toBe("SOLO_ADMIN");
+    expect(await code(setBarberOpening(db, { actor: admin, userId: ids.jere, month: "octubre", debt: 0 }))).toBe("MES_INVALIDO");
+    expect(await code(setBarberOpening(db, { actor: admin, userId: ids.jere, month: "2026-10", debt: 1.5 }))).toBe("MONTO_INVALIDO");
+    expect(await code(setBarberOpening(db, { actor: admin, userId: ids.ale, month: "2026-10", debt: 0 }))).toBeNull(); // Ale también es barbero
+    await setBarberOpening(db, { actor: admin, userId: ids.jere, month: "2026-10", debt: 0 });
+    expect(await db.auditLog.count({ where: { entity: "Setting", entityId: `barberOpening:${ids.jere}` } })).toBe(1);
+  });
+});
+const carriedFrom2 = async (name: string) => (await by(name, "2026-11")).carried;

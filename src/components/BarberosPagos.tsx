@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { saveBarberPayment, voidBarberPaymentAction } from "../app/actions";
+import { saveBarberOpening, saveBarberPayment, voidBarberPaymentAction } from "../app/actions";
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import type { BarberPayable, BarberPayables } from "../services/barberpay";
 import { useAction } from "./useAction";
@@ -43,12 +43,38 @@ function PayForm({ b, today }: { b: BarberPayable; today: string }) {
 const cell = (n: number) => (n === 0 ? <span className="muted">–</span> : formatARS(n));
 
 /** Mayor contable del mes: una fila por día, saldo acumulado a la derecha. `Saldo` > 0 = el barbero le debe al local. */
-export function Mayor({ b }: { b: BarberPayable }) {
+/** Edita el saldo con el que arranca el mes (ej.: Jere arranca octubre en cero). Positivo: el barbero le debe al local. */
+function OpeningForm({ b, month }: { b: BarberPayable; month: string }) {
+  const [debt, setDebt] = useState(String(-b.carried));
+  const [note, setNote] = useState(b.opening?.note ?? "");
+  const { pending, run, toast } = useAction();
+  return (
+    <details style={{ margin: "6px 0" }}>
+      <summary className="muted">Editar el saldo de arranque de {monthLabel(month)}{b.opening ? " (fijado a mano)" : ""}</summary>
+      <form onSubmit={(e) => { e.preventDefault(); const t = debt.trim().replace(/[^\d-]/g, ""); run(() => saveBarberOpening({ userId: b.userId, month, debt: t === "" || t === "-" ? 0 : Number(t), note })); }}>
+        <label className="field">
+          <span>Saldo con el que arranca {monthLabel(month)} ($)</span>
+          <input inputMode="numeric" value={debt} onChange={(e) => setDebt(e.target.value)} placeholder="0" />
+        </label>
+        <p className="muted" style={{ margin: "0 0 8px" }}>Positivo: {b.name} le debe al local. Negativo: el local le debe a {b.name}. 0 = arranca limpio. Desde este mes no se arrastra lo anterior.</p>
+        <label className="field"><span>Nota (opcional)</span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej.: arranca de cero" /></label>
+        <div className="row">
+          <button className="btn primary" type="submit" disabled={pending}>Guardar saldo inicial</button>
+          {b.opening && <button className="btn" type="button" disabled={pending} onClick={() => run(() => saveBarberOpening({ userId: b.userId, month, debt: null }))}>Quitar y arrastrar el historial</button>}
+        </div>
+      </form>
+      {toast}
+    </details>
+  );
+}
+
+export function Mayor({ b, month }: { b: BarberPayable; month: string }) {
   const sum = (f: (r: BarberPayable["ledger"][number]) => number) => b.ledger.reduce((a, r) => a + f(r), 0);
   const last = b.ledger.at(-1)?.debt ?? -b.carried;
   return (
     <details open style={{ marginTop: 8 }}>
       <summary><b>Cuenta corriente del mes</b> <span className="muted">(mayor, día por día)</span></summary>
+      <OpeningForm key={`${b.userId}-${b.carried}-${b.opening?.month ?? ""}`} b={b} month={month} />
       <div style={{ overflowX: "auto" }}>
         <table className="grid mayor" aria-label={`Mayor de ${b.name}`}>
           <thead>
@@ -143,7 +169,7 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
               </>
             )}
           </ul>
-          {!b.selfPaid && (b.ledger.length > 0 || b.carried !== 0) && <Mayor b={b} />}
+          {!b.selfPaid && (b.ledger.length > 0 || b.carried !== 0) && <Mayor b={b} month={data.month} />}
           {b.selfPaid ? <p className="muted" style={{ margin: 0 }}>{b.name} retira su parte de la cuenta donde entran los cortes, por eso no suma a lo que hay que pagar.</p> : <PayForm key={`${b.userId}-${b.toPay}`} b={b} today={today} />}
         </section>
       ))}

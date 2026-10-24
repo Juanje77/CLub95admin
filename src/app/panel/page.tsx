@@ -261,7 +261,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       {payables.barbers.filter((b) => !b.selfPaid && (b.ledger.length > 0 || b.carried !== 0)).map((b) => (
         <section key={b.userId} className="card" style={{ marginBottom: 12 }}>
           <h2 style={{ marginTop: 0 }}>Cuenta corriente de {b.name} <Link className="sec-link noprint" href={`/barberos?mes=${month}`}>registrar pagos →</Link></h2>
-          <Mayor b={b} />
+          <Mayor b={b} month={month} />
         </section>
       ))}
       <h2>Ranking de barberos</h2>

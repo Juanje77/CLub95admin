@@ -10,7 +10,7 @@ import { getSessionUser, loginWithPin, type SessionUser } from "../services/auth
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError, isAdmin } from "../services/common";
-import { addBarberPayment, voidBarberPayment } from "../services/barberpay";
+import { addBarberPayment, setBarberOpening, voidBarberPayment } from "../services/barberpay";
 import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
 import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
@@ -393,6 +393,13 @@ export async function saveBarberPayment(p: { userId: string; date: string; amoun
   return run(async (actor) => {
     await addBarberPayment(db, { actor, ...p, amount: int(p.amount) });
     return p.direction === "DEL_BARBERO" ? "Devolución registrada." : "Pago registrado.";
+  });
+}
+
+export async function saveBarberOpening(p: { userId: string; month: string; debt: number | null; note?: string }) {
+  return run(async (actor) => {
+    await setBarberOpening(db, { actor, ...p, debt: p.debt === null ? null : int(p.debt) });
+    return p.debt === null ? "Saldo inicial quitado: vuelve a arrastrar el historial." : "Saldo inicial guardado.";
   });
 }
 

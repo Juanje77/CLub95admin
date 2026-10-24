@@ -398,6 +398,12 @@ await page.getByRole("heading", { name: "Pagos y devoluciones de este mes" }).wa
 await page.waitForFunction(() => /Lucio/.test([...document.querySelectorAll("ul.list.card")].pop()?.textContent ?? ""));
 check(true, "el pago a Lucio queda registrado y baja lo que falta");
 await shot("a-pagar-barberos");
+// Saldo inicial editable: se puede arrancar el mes en cero.
+await lucioPay.getByText(/Editar el saldo de arranque/).click();
+await lucioPay.getByLabel(/Saldo con el que arranca/).fill("0");
+await lucioPay.getByRole("button", { name: "Guardar saldo inicial" }).click();
+await page.getByText("Saldo inicial guardado.").first().waitFor();
+check(true, "el saldo de arranque de la cuenta corriente se puede editar (arrancar en cero)");
 // Con datos (el mayor es una tabla ancha) la página no debe desbordar ni en celular ni en computadora.
 const noHScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 check(await noHScroll(), "A pagar a los barberos no desborda en celular");

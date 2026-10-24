@@ -131,6 +131,43 @@ export async function barberLedger(db: Db, userId: string, month: string, carrie
     });
 }
 
+export interface BarberOpening {
+  /** Mes desde el que rige este saldo inicial (YYYY-MM). Lo anterior no se arrastra. */
+  month: string;
+  /** Con el signo de la cuenta corriente: positivo = el barbero le debe al local; negativo = el local le debe. */
+  debt: number;
+  note?: string;
+}
+
+async function loadOpenings(db: Db): Promise<Record<string, BarberOpening>> {
+  const row = await db.setting.findUnique({ where: { key: "barberOpening" } });
+  if (!row) return {};
+  try {
+    return JSON.parse(row.value) as Record<string, BarberOpening>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Fija el saldo con el que arranca la cuenta corriente de un barbero en un mes (por ejemplo, Jere arranca octubre en cero).
+ * Desde ese mes el saldo parte de este número y no arrastra lo anterior. `debt: null` lo quita y vuelve a arrastrar todo el historial.
+ */
+export async function setBarberOpening(db: PrismaClient, p: { actor: Actor; userId: string; month: string; debt: number | null; note?: string }) {
+  if (!isAdmin(p.actor)) throw new DomainError("SOLO_ADMIN", "Solo el admin o el dueño editan el saldo de la cuenta corriente.");
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(p.month)) throw new DomainError("MES_INVALIDO", "El mes es inválido.");
+  const barber = await db.user.findUnique({ where: { id: p.userId } });
+  if (!barber || !barber.isBarber) throw new DomainError("BARBERO_INVALIDO", "Ese usuario no es un barbero.");
+  if (p.debt !== null && (!Number.isInteger(p.debt) || Math.abs(p.debt) > 1_000_000_000)) throw new DomainError("MONTO_INVALIDO", "El saldo debe ser un número entero.");
+  const all = await loadOpenings(db);
+  const before = all[p.userId] ?? null;
+  if (p.debt === null) delete all[p.userId];
+  else all[p.userId] = { month: p.month, debt: p.debt, ...(p.note?.trim() ? { note: p.note.trim().slice(0, 200) } : {}) };
+  const value = JSON.stringify(all);
+  await db.setting.upsert({ where: { key: "barberOpening" }, update: { value }, create: { key: "barberOpening", value } });
+  await audit(db, { userId: p.actor.id, entity: "Setting", entityId: `barberOpening:${p.userId}`, action: "UPDATE", before, after: all[p.userId] ?? null });
+}
+
 export interface BarberPayable extends BarberMonth {
   userId: string;
   name: string;
@@ -142,6 +179,8 @@ export interface BarberPayable extends BarberMonth {
   toPay: number;
   /** Movimientos del mes con saldo corrido (cuenta corriente). */
   ledger: LedgerRow[];
+  /** Saldo inicial fijado a mano que rige para este mes (si lo hay). */
+  opening: BarberOpening | null;
 }
 export interface BarberPaymentRow { id: string; userId: string; name: string; date: string; amount: number; method: string; note: string | null }
 export interface BarberPayables {
@@ -170,19 +209,22 @@ export async function getBarberPayables(db: Db, month: string): Promise<BarberPa
     firstMonth(db),
     db.barberPayment.findMany({ where: { deletedAt: null, date: monthRange(month) }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] }),
   ]);
-  const months: string[] = [];
-  if (first) for (let m = first; m < month; m = nextMonth(m)) months.push(m);
-
+  const openings = await loadOpenings(db);
   const ctx = newPayCtx(db);
   const barbers: BarberPayable[] = [];
   for (const u of users) {
+    // Si hay un saldo inicial fijado a mano para un mes que ya llegó, se parte de ahí y no se arrastra lo anterior.
+    const op = openings[u.id] && openings[u.id]!.month <= month ? openings[u.id]! : null;
+    const start = op ? op.month : first;
+    const months: string[] = [];
+    if (start) for (let m = start; m < month; m = nextMonth(m)) months.push(m);
     const past = await Promise.all(months.map((m) => barberMonth(db, u.id, m, ctx)));
-    const carried = past.reduce((t, x) => t + x.balance, 0);
+    const carried = (op ? -op.debt : 0) + past.reduce((t, x) => t + x.balance, 0);
     const cur = await barberMonth(db, u.id, month, ctx);
     const selfPaid = u.role === "ADMIN";
     // Un barbero inactivo sin movimientos ni saldo no aporta nada a la lista.
     if (!u.active && cur.entitled === 0 && cur.collected === 0 && carried === 0) continue;
-    barbers.push({ ...cur, userId: u.id, name: u.name, selfPaid, carried, toPay: carried + cur.balance, ledger: await barberLedger(db, u.id, month, carried, ctx) });
+    barbers.push({ ...cur, userId: u.id, name: u.name, selfPaid, carried, toPay: carried + cur.balance, ledger: await barberLedger(db, u.id, month, carried, ctx), opening: op && op.month === month ? op : null });
   }
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
   return {
