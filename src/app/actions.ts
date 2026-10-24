@@ -386,10 +386,10 @@ export async function voidFundEntryAction(p: { id: string; reason: string }) {
 
 // --- Pagos a los barberos -------------------------------------------------------------------------------------------------------
 
-export async function saveBarberPayment(p: { userId: string; date: string; amount: number; method: string; note: string }) {
+export async function saveBarberPayment(p: { userId: string; date: string; amount: number; method: string; note: string; direction?: "A_BARBERO" | "DEL_BARBERO" }) {
   return run(async (actor) => {
     await addBarberPayment(db, { actor, ...p, amount: int(p.amount) });
-    return "Pago registrado.";
+    return p.direction === "DEL_BARBERO" ? "Devolución registrada." : "Pago registrado.";
   });
 }
 

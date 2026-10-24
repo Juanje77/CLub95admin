@@ -90,6 +90,7 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 - **Le corresponde:** el 60 % (su porcentaje) de los **cortes de la planilla** (precio − bebida) más lo de los **socios** (de lo que pagaron, menos la bebida × los cortes del mes).
 - **Ya cobró:** el efectivo que retiró de la caja, lo que se ingresó en su cuenta propia (Mercado Pago de Jere) y los **pagos registrados** desde la pantalla ("Registrar un pago": transferencia o efectivo, con anulación y motivo).
 - **Falta pagarle** = le corresponde − ya cobró, **más lo que quedó de meses anteriores**. Si cobró de más, figura como "Cobró de más: te debe".
+- **Cuenta corriente** (en cada barbero, "Cuenta corriente del mes"): movimientos día por día con saldo corrido: lo que le corresponde por sus cortes, lo que **entró en su cuenta** (Jere cobra en su Mercado Pago y no transfiere el 40 % ni la bebida), el efectivo que retiró, los **adelantos** y las **devoluciones**. A fin de mes lo que se le debe ya viene descontado de lo que cobró por adelantado; si el saldo da negativo, es lo que el barbero le debe al local. Para anotar que Jere transfirió plata al local: "Registrar un pago o devolución" → **Me devolvió**.
 - Ale se paga solo (retira su parte de la cuenta donde entran los cortes), por eso no suma al total a pagar.
 
 ## Cuentas bancarias

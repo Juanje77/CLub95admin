@@ -394,7 +394,7 @@ check(/Retira de su cuenta/.test(await page.getByRole("region", { name: "Barbero
 await lucioPay.getByLabel("Monto ($)").fill("1000");
 await lucioPay.getByRole("button", { name: "Registrar pago" }).click();
 await page.getByText("Pago registrado.").first().waitFor();
-await page.getByRole("heading", { name: "Pagos registrados este mes" }).waitFor();
+await page.getByRole("heading", { name: "Pagos y devoluciones de este mes" }).waitFor();
 await page.waitForFunction(() => /Lucio/.test([...document.querySelectorAll("ul.list.card")].pop()?.textContent ?? ""));
 check(true, "el pago a Lucio queda registrado y baja lo que falta");
 await shot("a-pagar-barberos");

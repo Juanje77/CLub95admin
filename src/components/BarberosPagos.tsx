@@ -11,13 +11,18 @@ const num = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
 function PayForm({ b, today }: { b: BarberPayable; today: string }) {
   const [amount, setAmount] = useState(b.toPay > 0 ? String(b.toPay) : "");
   const [method, setMethod] = useState("BANCO");
+  const [back, setBack] = useState(false);
   const [date, setDate] = useState(today);
   const [note, setNote] = useState("");
   const { pending, run, toast } = useAction();
   return (
     <details open={b.toPay > 0 && !b.selfPaid}>
-      <summary><b>Registrar un pago a {b.name}</b></summary>
-      <form onSubmit={(e) => { e.preventDefault(); run(() => saveBarberPayment({ userId: b.userId, date, amount: num(amount), method, note }), () => { setAmount(""); setNote(""); }); }}>
+      <summary><b>Registrar un pago o devolución de {b.name}</b></summary>
+      <div className="seg" role="group" aria-label="Tipo de movimiento" style={{ margin: "8px 0" }}>
+        <button type="button" aria-pressed={!back} onClick={() => setBack(false)}>Le pagué / adelanto</button>
+        <button type="button" aria-pressed={back} onClick={() => setBack(true)}>Me devolvió</button>
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); run(() => saveBarberPayment({ userId: b.userId, date, amount: num(amount), method, note, direction: back ? "DEL_BARBERO" : "A_BARBERO" }), () => { setAmount(""); setNote(""); }); }}>
         <label className="field"><span>Monto ($)</span><input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={b.toPay > 0 ? String(b.toPay) : "0"} /></label>
         <div className="seg" role="group" aria-label="Medio de pago" style={{ marginBottom: 8 }}>
           <button type="button" aria-pressed={method === "BANCO"} onClick={() => setMethod("BANCO")}>Transferencia</button>
@@ -28,7 +33,7 @@ function PayForm({ b, today }: { b: BarberPayable; today: string }) {
           <label className="field"><span>Fecha</span><input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
           <label className="field"><span>Nota (opcional)</span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej.: desde la cuenta de Ale" /></label>
         </details>
-        <button className="btn primary" type="submit" disabled={pending || num(amount) <= 0}>Registrar pago</button>
+        <button className="btn primary" type="submit" disabled={pending || num(amount) <= 0}>{back ? "Registrar devolución" : "Registrar pago"}</button>
       </form>
       {toast}
     </details>
@@ -77,17 +82,32 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
               </>
             )}
           </ul>
+          {!b.selfPaid && b.ledger.length > 0 && (
+            <details style={{ marginTop: 8 }}>
+              <summary><b>Cuenta corriente del mes</b> <span className="muted">(día por día)</span></summary>
+              <ul className="list">
+                {b.carried !== 0 && <li><span className="muted">Saldo que arrastra</span><span className="num">{formatARS(b.carried)}</span></li>}
+                {b.ledger.map((l, i) => (
+                  <li key={i}>
+                    <span>{l.label}<span className="muted"> · {l.date.endsWith("-31") && l.label.includes("socios") ? "fin de mes" : formatDate(l.date)}</span></span>
+                    <span className="num">{l.amount > 0 ? "+" : "−"}{formatARS(Math.abs(l.amount))} <span className="muted">→ {formatARS(l.balance)}</span></span>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted" style={{ margin: 0 }}>El saldo corrido es lo que se le debe (si es negativo, es lo que {b.name} le debe al local).</p>
+            </details>
+          )}
           {b.selfPaid ? <p className="muted" style={{ margin: 0 }}>{b.name} retira su parte de la cuenta donde entran los cortes, por eso no suma a lo que hay que pagar.</p> : <PayForm key={`${b.userId}-${b.toPay}`} b={b} today={today} />}
         </section>
       ))}
 
-      <h2>Pagos registrados este mes</h2>
+      <h2>Pagos y devoluciones de este mes</h2>
       <ul className="list card" style={{ padding: "4px 14px" }}>
         {data.payments.map((p) => (
           <li key={p.id}>
             <span>{p.name} <span className="muted">· {formatDate(p.date)} · {p.method === "EFECTIVO" ? "efectivo" : "transferencia"}{p.note ? ` · ${p.note}` : ""}</span></span>
             <span className="num">
-              {formatARS(p.amount)}{" "}
+              {p.amount < 0 ? "Devolvió " : ""}{formatARS(Math.abs(p.amount))}{" "}
               <button className="btn danger" style={{ minHeight: 30, padding: "0 8px" }} disabled={pending} aria-label="Anular pago" onClick={() => { const reason = prompt("Motivo para anular este pago:"); if (reason) run(() => voidBarberPaymentAction({ id: p.id, reason })); }}>✕</button>
             </span>
           </li>

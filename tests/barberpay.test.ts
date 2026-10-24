@@ -103,3 +103,18 @@ describe("cuánto hay que pagarle a cada barbero", () => {
     expect(await code(addBarberPayment(db, { ...base, actor: lucio }))).toBe("SOLO_ADMIN");
   });
 });
+
+describe("cuenta corriente de un barbero que cobra en su cuenta", () => {
+  it("lo que entró a su cuenta se descuenta, un adelanto resta, una devolución suma, y el detalle va día por día", async () => {
+    await db.paymentAccount.upsert({ where: { key: "MP_JERE" }, update: { ownerUserId: ids.jere }, create: { key: "MP_JERE", name: "Mercado Pago Jere", kind: "TRANSFERENCIA", ownerUserId: ids.jere } });
+    await setDeclared(db, { actor: admin, date: DAY, account: "MP_JERE", amount: 40000, now: NOW }); // cobró los 2 cortes en su Mercado Pago
+    await addBarberPayment(db, { actor: admin, userId: ids.jere, date: DAY, amount: 10000, method: "EFECTIVO", note: "adelanto", now: NOW });
+    let jere = await by("Jere");
+    expect(jere.toPay).toBe(58200 - 40000 - 10000); // 8.200
+    await addBarberPayment(db, { actor: admin, userId: ids.jere, date: DAY, amount: 3000, method: "BANCO", direction: "DEL_BARBERO", now: NOW });
+    jere = await by("Jere");
+    expect(jere.toPay).toBe(11200);
+    expect(jere.ledger.map((l) => l.label.split(" ·")[0])).toEqual(["Le corresponde por sus cortes", "Entró en su cuenta (cobros del día)", "Adelanto o pago", "Devolvió al local", "Le corresponde por los socios del mes"]);
+    expect(jere.ledger.at(-1)!.balance).toBe(11200);
+  });
+});

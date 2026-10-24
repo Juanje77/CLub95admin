@@ -58,6 +58,52 @@ export async function barberMonth(db: Db, userId: string, month: string): Promis
   return { laborServices, laborMembership, entitled, cashTaken, ownTransfers, paid, collected, balance: entitled - collected };
 }
 
+export interface LedgerLine {
+  date: string;
+  label: string;
+  /** Con signo sobre lo que se le debe al barbero: + le corresponde / me devolvió, − ya cobró. */
+  amount: number;
+  balance: number;
+}
+
+/**
+ * Cuenta corriente del mes: día por día lo que le corresponde por los cortes, lo que entró en su cuenta propia
+ * (Mercado Pago de Jere), el efectivo que retiró y los adelantos o devoluciones. Parte del saldo que arrastra de meses anteriores.
+ */
+export async function barberLedger(db: Db, userId: string, month: string, carried: number): Promise<LedgerLine[]> {
+  const { tariffs, rules } = await loadPricing(db);
+  const raw: { date: string; label: string; amount: number; order: number }[] = [];
+  const sales = await db.sale.findMany({ where: { userId, kind: "SERVICE", deletedAt: null, date: monthRange(month) } });
+  const byDate = new Map<string, ServiceCounts>();
+  for (const x of sales) {
+    const c = byDate.get(x.date) ?? {};
+    c[x.serviceType as ServiceType] = (c[x.serviceType as ServiceType] ?? 0) + x.quantity;
+    byDate.set(x.date, c);
+  }
+  for (const [date, services] of byDate) {
+    const labor = computeDay({ date, tariffs, barbers: [{ barberId: userId, rules: rules.get(userId) ?? [], services }] }).labor;
+    if (labor) raw.push({ date, label: "Le corresponde por sus cortes", amount: labor, order: 0 });
+  }
+  const own = await db.paymentAccount.findMany({ where: { ownerUserId: userId, deletedAt: null } });
+  if (own.length) {
+    const lines = await db.cashCloseLine.findMany({ where: { account: { in: own.map((a) => a.key) }, close: { deletedAt: null, date: monthRange(month) } }, include: { close: true } });
+    const perDay = new Map<string, number>();
+    for (const l of lines) perDay.set(l.close.date, (perDay.get(l.close.date) ?? 0) + l.amount);
+    for (const [date, amount] of perDay) if (amount) raw.push({ date, label: "Entró en su cuenta (cobros del día)", amount: -amount, order: 1 });
+  }
+  for (const e of await db.cashBoxEntry.findMany({ where: { userId, kind: "RETIRO_BARBERO", deletedAt: null, date: monthRange(month) } })) raw.push({ date: e.date, label: "Retiró efectivo", amount: e.amount, order: 2 });
+  for (const x of await db.barberPayment.findMany({ where: { userId, deletedAt: null, date: monthRange(month) } }))
+    raw.push({ date: x.date, label: x.amount < 0 ? `Devolvió al local${x.note ? ` · ${x.note}` : ""}` : `Adelanto o pago${x.note ? ` · ${x.note}` : ""}`, amount: -x.amount, order: 3 });
+  const labor = await membershipLaborFor(db, userId, month);
+  if (labor) raw.push({ date: `${month}-31`, label: "Le corresponde por los socios del mes", amount: labor, order: 4 });
+  raw.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.order - b.order));
+  let balance = carried;
+  return raw.map((r) => {
+    balance += r.amount;
+    return { date: r.date, label: r.label, amount: r.amount, balance };
+  });
+}
+
 export interface BarberPayable extends BarberMonth {
   userId: string;
   name: string;
@@ -67,6 +113,8 @@ export interface BarberPayable extends BarberMonth {
   carried: number;
   /** Lo que falta pagarle hoy: lo arrastrado más lo del mes. Negativo = cobró de más y tiene que devolver. */
   toPay: number;
+  /** Movimientos del mes con saldo corrido (cuenta corriente). */
+  ledger: LedgerLine[];
 }
 export interface BarberPaymentRow { id: string; userId: string; name: string; date: string; amount: number; method: string; note: string | null }
 export interface BarberPayables {
@@ -106,7 +154,7 @@ export async function getBarberPayables(db: Db, month: string): Promise<BarberPa
     const selfPaid = u.role === "ADMIN";
     // Un barbero inactivo sin movimientos ni saldo no aporta nada a la lista.
     if (!u.active && cur.entitled === 0 && cur.collected === 0 && carried === 0) continue;
-    barbers.push({ ...cur, userId: u.id, name: u.name, selfPaid, carried, toPay: carried + cur.balance });
+    barbers.push({ ...cur, userId: u.id, name: u.name, selfPaid, carried, toPay: carried + cur.balance, ledger: await barberLedger(db, u.id, month, carried) });
   }
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
   return {
@@ -117,7 +165,7 @@ export async function getBarberPayables(db: Db, month: string): Promise<BarberPa
   };
 }
 
-export async function addBarberPayment(db: PrismaClient, p: { actor: Actor; userId: string; date: string; amount: number; method: string; note?: string; now?: Date }) {
+export async function addBarberPayment(db: PrismaClient, p: { actor: Actor; userId: string; date: string; amount: number; method: string; note?: string; /** DEL_BARBERO: el barbero le devuelve plata al local (se guarda con signo negativo). */ direction?: "A_BARBERO" | "DEL_BARBERO"; now?: Date }) {
   if (!isAdmin(p.actor)) throw new DomainError("SOLO_ADMIN", "Solo el admin o el dueño registran pagos a los barberos.");
   if (!DATE_RE.test(p.date) || Number.isNaN(Date.parse(`${p.date}T12:00:00Z`))) throw new DomainError("FECHA_INVALIDA", "La fecha es inválida.");
   if (p.date > todayBA(p.now ?? new Date())) throw new DomainError("FECHA_FUTURA", "La fecha no puede ser futura.");
@@ -125,8 +173,9 @@ export async function addBarberPayment(db: PrismaClient, p: { actor: Actor; user
   if (!["BANCO", "EFECTIVO"].includes(p.method)) throw new DomainError("MEDIO_DE_PAGO_INVALIDO", "Elegí transferencia o efectivo.");
   const barber = await db.user.findUnique({ where: { id: p.userId } });
   if (!barber || !barber.isBarber) throw new DomainError("BARBERO_INVALIDO", "Ese usuario no es un barbero.");
-  const row = await db.barberPayment.create({ data: { userId: p.userId, date: p.date, amount: p.amount, method: p.method, note: p.note?.trim() || null, createdById: p.actor.id } });
-  await audit(db, { userId: p.actor.id, entity: "BarberPayment", entityId: row.id, action: "CREATE", after: { barber: barber.name, date: p.date, amount: p.amount, method: p.method } });
+  const back = p.direction === "DEL_BARBERO";
+  const row = await db.barberPayment.create({ data: { userId: p.userId, date: p.date, amount: back ? -p.amount : p.amount, method: p.method, note: p.note?.trim() || null, createdById: p.actor.id } });
+  await audit(db, { userId: p.actor.id, entity: "BarberPayment", entityId: row.id, action: "CREATE", after: { barber: barber.name, date: p.date, amount: back ? -p.amount : p.amount, method: p.method } });
   return row;
 }
 
