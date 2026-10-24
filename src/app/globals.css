@@ -7,7 +7,7 @@
   --brand: #111111;
   --gold: #ff4701; /* naranja Club 95 */
   --ok: #1f7a4d;
-  --warn: #b26a00;
+  --warn: #8a5200;
   --err: #b3261e;
   --ok-bg: #e5f4ec;
   --warn-bg: #fff1d6;
@@ -51,6 +51,7 @@ a { color: inherit; }
 button:disabled { opacity: .5; }
 button { font: inherit; cursor: pointer; }
 .btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 12px; padding: 12px 16px; font-weight: 600; min-height: 48px; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .btn.primary { background: var(--brand); color: var(--bg); border-color: var(--brand); }
 .btn.danger { color: var(--err); }
 .list { list-style: none; margin: 0; padding: 0; }
@@ -84,7 +85,7 @@ main.wide { max-width: none; padding: 12px 8px 96px; }
 .okc { color: var(--ok); } .errc { color: var(--err); }
 .gridwrap { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); -webkit-overflow-scrolling: touch; }
 table.grid { display: table; border-collapse: separate; border-spacing: 0; font-size: .82rem; min-width: max-content; }
-table.grid th, table.grid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0; height: 34px; text-align: right; background: var(--card); white-space: nowrap; }
+table.grid th, table.grid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0; height: 40px; text-align: right; background: var(--card); white-space: nowrap; }
 table.grid td { min-width: 64px; padding: 0 6px; font-variant-numeric: tabular-nums; }
 table.grid thead th { position: sticky; top: 0; z-index: 3; background: var(--card); }
 table.grid .sticky { position: sticky; left: 0; z-index: 2; background: var(--card); text-align: left; padding: 0 8px; min-width: 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
@@ -107,7 +108,7 @@ table.grid tr.calcrow td.calc, table.grid tr.calcrow th { color: var(--muted); }
 table.grid tr.tone-strong td, table.grid tr.tone-strong th { color: var(--ink); font-weight: 700; }
 table.grid tr.tone-profit td, table.grid tr.tone-profit th { color: var(--ok); font-weight: 800; background: var(--ok-bg); }
 table.grid tr.tone-diff td.errc { color: var(--err); font-weight: 800; } table.grid tr.tone-diff td.okc { color: var(--ok); font-weight: 800; }
-input.cell { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; height: 32px; min-height: 0; border: 0; border-radius: 6px; padding: 0 4px; text-align: right; background: transparent; font-variant-numeric: tabular-nums; font-size: .9rem; }
+input.cell { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; height: 38px; min-height: 0; border: 0; border-radius: 6px; padding: 0 4px; text-align: right; background: transparent; font-variant-numeric: tabular-nums; font-size: .9rem; }
 input.cell:focus { outline: 2px solid var(--gold); background: var(--card); }
 .cellro { display: block; text-align: right; color: var(--muted); }
 .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin-top: 10px; }
@@ -127,7 +128,7 @@ details summary { cursor: pointer; padding: 6px 0; }
 }
 
 /* --- Socios (asistencia) --- */
-button.att { all: unset; box-sizing: border-box; width: 100%; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 800; color: var(--ok); }
+button.att { all: unset; box-sizing: border-box; width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 800; color: var(--ok); }
 button.att.on { background: var(--ok-bg); }
 button.att:disabled { cursor: default; opacity: .6; }
 button.att:not(:disabled):hover { background: var(--line); }
@@ -221,9 +222,9 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
 
 /* Panel del dueño: pestañas por tema */
 .onlyprint { display: none; }
-.ptabs { position: sticky; top: 0; z-index: 30; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; margin: 0 0 6px; background: var(--bg); border-bottom: 1px solid var(--line); -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.ptabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; margin: 0 0 6px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .ptabs::-webkit-scrollbar { display: none; }
-.ptab { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 9px 14px; font-size: .9rem; font-weight: 700; min-height: 44px; white-space: nowrap; }
+.ptab { flex: 1 1 auto; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 9px 14px; font-size: .9rem; font-weight: 700; min-height: 44px; white-space: nowrap; text-align: center; }
 .ptab[aria-selected="true"] { background: var(--brand); color: var(--bg); border-color: var(--brand); }
 .pbadge { margin-left: 6px; background: var(--err); color: #fff; border-radius: 999px; padding: 1px 7px; font-size: .72rem; }
 .tabpanel[hidden] { display: none; }
@@ -240,7 +241,7 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
 .toolbar { display: grid; gap: 8px; margin: 8px 0; }
 .toolbar .search { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: var(--radius); padding: 0 14px; background: var(--card); color: var(--ink); font-size: 1rem; box-sizing: border-box; }
 .toolbar .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.toolbar .pill { min-height: 38px; padding: 4px 11px; font-size: .84rem; }
+.toolbar .pill { min-height: 44px; padding: 4px 11px; font-size: .84rem; }
 .drawer-back.sheet { align-items: flex-end; padding: 0; }
 .drawer-back.sheet .drawer { max-width: 520px; border-radius: var(--radius) var(--radius) 0 0; padding: 14px 16px 22px; }
 @media (min-width: 700px) { .drawer-back.sheet { align-items: center; } .drawer-back.sheet .drawer { border-radius: var(--radius); } }
@@ -249,3 +250,16 @@ table.grid.cuenta .sticky { min-width: 190px; max-width: 190px; }
 /* Socios: barra para eliminar los elegidos */
 .selbar { position: fixed; left: 8px; right: 8px; bottom: 76px; z-index: 35; display: grid; gap: 8px; padding: 12px; border-radius: var(--radius); background: var(--card); border: 2px solid var(--err); box-shadow: 0 8px 28px rgba(0,0,0,.3); max-width: 640px; margin: 0 auto; }
 .selbar input { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--bg); color: var(--ink); font-size: 1rem; box-sizing: border-box; width: 100%; }
+
+/* Mayor del barbero: encabezados en dos líneas y números alineados */
+table.grid.mayor th { white-space: normal; min-width: 96px; font-size: .74rem; line-height: 1.15; padding: 6px 6px; height: auto; vertical-align: bottom; }
+table.grid.mayor tfoot td { border-top: 2px solid var(--ink); }
+
+/* Enlaces dentro de un texto: área táctil cómoda sin cambiar el aspecto del párrafo */
+p a:not(.btn) { padding: 12px 2px; margin: -12px 0; }
+
+/* En oscuro los colores de estado son claros: el texto sobre ellos va oscuro para mantener el contraste */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .toast.ok, :root:not([data-theme="light"]) .toast.err,
+  :root:not([data-theme="light"]) nav.tabs .badge, :root:not([data-theme="light"]) .pbadge { color: #111; }
+}

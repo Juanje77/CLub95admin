@@ -120,3 +120,13 @@ describe("cuenta corriente de un barbero que cobra en su cuenta", () => {
     ]);
   });
 });
+
+describe("rendimiento: el saldo arrastrado no repite lecturas por mes", () => {
+  it("con un año de historia calcula rápido y arrastra bien", async () => {
+    const t0 = Date.now();
+    const data = await getBarberPayables(db, "2027-10"); // 12 meses de arrastre
+    expect(Date.now() - t0).toBeLessThan(4000);
+    const jere = data.barbers.find((b) => b.name === "Jere")!;
+    expect(jere.carried).toBe(58200); // lo de octubre 2026 sigue sin pagarse
+  });
+});

@@ -140,7 +140,7 @@ export default function SociosCajas({ data, today, prevMonth, nextMonth }: Props
             <span>{FUND_NAME[e.fund] ?? e.fund} · {KIND_LABEL[e.kind] ?? e.kind} <span className="muted">· {formatDate(e.date)}{e.note ? ` · ${e.note}` : ""}</span></span>
             <span className="num">
               {signed(e.amount)}{" "}
-              <button className="btn danger" style={{ minHeight: 30, padding: "0 8px" }} disabled={pending} aria-label="Anular movimiento" onClick={() => { const reason = prompt("Motivo para anular este movimiento:"); if (reason) run(() => voidFundEntryAction({ id: e.id, reason })); }}>✕</button>
+              <button className="btn danger" style={{ minHeight: 44, minWidth: 44, padding: "0 8px" }} disabled={pending} aria-label="Anular movimiento" onClick={() => { const reason = prompt("Motivo para anular este movimiento:"); if (reason) run(() => voidFundEntryAction({ id: e.id, reason })); }}>✕</button>
             </span>
           </li>
         ))}

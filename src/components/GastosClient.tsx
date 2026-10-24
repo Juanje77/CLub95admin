@@ -267,7 +267,7 @@ export default function GastosClient(p: Props) {
           {p.extra.map((e) => (
             <li key={e.id}>
               <span>{e.concept} <span className="muted">· {formatDate(e.date)}{e.note ? ` · ${e.note}` : ""}</span></span>
-              <span className="num">{formatARS(e.amount)} <button className="btn danger" style={{ minHeight: 32, padding: "2px 10px" }} aria-label="Borrar ingreso" onClick={() => { if (confirm("¿Borrar este ingreso?")) run(() => removeExtraIncome({ id: e.id })); }}>✕</button></span>
+              <span className="num">{formatARS(e.amount)} <button className="btn danger" style={{ minHeight: 44, padding: "2px 10px" }} aria-label="Borrar ingreso" onClick={() => { if (confirm("¿Borrar este ingreso?")) run(() => removeExtraIncome({ id: e.id })); }}>✕</button></span>
             </li>
           ))}
         </ul>
@@ -287,7 +287,7 @@ export default function GastosClient(p: Props) {
           {p.concepts.map((c) => (
             <li key={c.id}>
               <span>{c.name} <span className="muted">· {CAT_LABEL[c.category]}</span></span>
-              <button className="btn" style={{ minHeight: 32, padding: "2px 10px" }} disabled={pending} onClick={() => run(() => toggleConcept({ id: c.id, active: !c.active }))}>{c.active ? "Dar de baja" : "Reactivar"}</button>
+              <button className="btn" style={{ minHeight: 44, padding: "2px 10px" }} disabled={pending} onClick={() => run(() => toggleConcept({ id: c.id, active: !c.active }))}>{c.active ? "Dar de baja" : "Reactivar"}</button>
             </li>
           ))}
         </ul>
@@ -303,7 +303,7 @@ export default function GastosClient(p: Props) {
           {p.recurring.map((r) => (
             <li key={r.id}>
               <span>{r.concept} <span className="muted">· día {r.dayOfMonth}{r.amount ? ` · ${formatARS(r.amount)}` : ""}</span></span>
-              <button className="btn danger" style={{ minHeight: 32, padding: "2px 10px" }} disabled={pending} onClick={() => { if (confirm("¿Sacar este gasto fijo?")) run(() => removeRecurring({ id: r.id })); }}>Sacar</button>
+              <button className="btn danger" style={{ minHeight: 44, padding: "2px 10px" }} disabled={pending} onClick={() => { if (confirm("¿Sacar este gasto fijo?")) run(() => removeRecurring({ id: r.id })); }}>Sacar</button>
             </li>
           ))}
         </ul>

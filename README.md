@@ -283,3 +283,14 @@ DATABASE_URL="<la de producción>" npm run import:planilla -- --month 2026-09
 - El **PDF** se genera con "Imprimir / guardar PDF" del navegador (hay estilos de impresión), no con un generador propio.
 - Las **alertas** se muestran dentro de la app; no se envían notificaciones push ni mensajes.
 - `prisma db push` en el build es cómodo mientras no haya datos reales delicados; más adelante conviene pasar a migraciones (`prisma migrate`).
+
+## Auditoría de calidad
+
+Ver [`AUDITORIA.md`](AUDITORIA.md): hallazgos corregidos, lo verificado y lo que necesita una decisión.
+Para repetir el recorrido de pantallas (celular y escritorio, claro y oscuro; desborde, botones chicos, campos sin etiqueta, errores de consola y permisos de un barbero):
+
+```bash
+CHROME=/ruta/a/chrome bash scripts/audit-ui.sh   # capturas en /tmp/club95-audit
+```
+
+Cambiar o resetear un PIN cierra las demás sesiones abiertas de ese usuario.

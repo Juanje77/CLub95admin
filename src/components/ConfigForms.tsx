@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { adminAddPrice, adminAddRule, adminAddTariff, adminAdjustStock, adminCreateBarber, adminCreateProduct, adminProductSettings, adminResetPin, adminSetActive, changePin } from "../app/actions";
-import { formatARS, formatDate } from "../domain/money";
+import { formatARS, formatDate, todayBA } from "../domain/money";
 import { SERVICE_LABEL, SERVICE_TYPES, type ServiceType } from "../domain/types";
 import { useAction } from "./useAction";
 
@@ -71,7 +71,7 @@ export function PinForm() {
 }
 
 function RuleForm({ user, onDone }: { user: UserView; onDone?: () => void }) {
-  const [validFrom, setValidFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [validFrom, setValidFrom] = useState(todayBA());
   const [pct, setPct] = useState(String((user.rule?.commissionBp ?? 6000) / 100));
   const [drink, setDrink] = useState(String(user.rule?.drinkDeduction ?? 3000));
   const [cost, setCost] = useState(String(user.rule?.drinkCost ?? user.rule?.drinkDeduction ?? 3000));
@@ -148,7 +148,7 @@ function NewBarberForm({ onCreated }: { onCreated: (pin: string, name: string) =
   const [username, setUsername] = useState("");
   const [pct, setPct] = useState("60");
   const [drink, setDrink] = useState("3000");
-  const [validFrom, setValidFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [validFrom, setValidFrom] = useState(todayBA());
   const { pending, run, toast } = useAction();
   return (
     <form
@@ -173,7 +173,7 @@ function NewBarberForm({ onCreated }: { onCreated: (pin: string, name: string) =
 
 export function TariffSection({ tariffs }: { tariffs: TariffView[] }) {
   const [serviceType, setServiceType] = useState<ServiceType>("CORTE");
-  const [validFrom, setValidFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [validFrom, setValidFrom] = useState(todayBA());
   const [price, setPrice] = useState("");
   const { pending, run, toast } = useAction();
   return (
@@ -214,7 +214,7 @@ function ProductRowView({ p }: { p: ProductView }) {
   const [reason, setReason] = useState("");
   const [price, setPrice] = useState(String(p.price));
   const [cost, setCost] = useState(String(p.cost));
-  const [from, setFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [from, setFrom] = useState(todayBA());
   const [min, setMin] = useState(String(p.minStock));
   const { pending, run, toast } = useAction();
   const low = p.minStock > 0 && p.stock <= p.minStock;
@@ -268,7 +268,7 @@ export function ProductSection({ products }: { products: ProductView[] }) {
       </ul>
       <details className="card" style={{ marginTop: 10 }}>
         <summary><b>+ Agregar un producto</b></summary>
-        <form onSubmit={(e) => { e.preventDefault(); run(() => adminCreateProduct({ name, kind, price: num(price), cost: num(cost), stock: num(stock), minStock: num(min), validFrom: new Date().toISOString().slice(0, 10) }), () => { setName(""); setPrice(""); setCost(""); }); }}>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => adminCreateProduct({ name, kind, price: num(price), cost: num(cost), stock: num(stock), minStock: num(min), validFrom: todayBA() }), () => { setName(""); setPrice(""); setCost(""); }); }}>
           <label className="field"><span>Nombre</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label className="field"><span>Tipo</span><select value={kind} onChange={(e) => setKind(e.target.value)}><option value="BEBIDA">Bebida</option><option value="CERA">Cera</option><option value="POLVO">Polvo</option><option value="ACEITE">Aceite</option></select></label>
           <div className="row"><label className="field" style={{ flex: 1 }}><span>Precio ($)</span><input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} /></label><label className="field" style={{ flex: 1 }}><span>Costo ($)</span><input inputMode="numeric" value={cost} onChange={(e) => setCost(e.target.value)} /></label></div>

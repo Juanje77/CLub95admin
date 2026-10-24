@@ -514,7 +514,14 @@ async function monthLines(db: Db, month: string) {
  * (cobrado − bebida × cortes del mes) × su porcentaje. Un socio que no pagó no genera nada todavía.
  */
 export async function membershipLaborFor(db: Db, userId: string, period: string): Promise<number> {
-  return (await monthLines(db, period)).filter((l) => l.who === userId && l.rule).reduce((t, l) => t + paidFigures(l.paid, l.qty, l.rule!).labor, 0);
+  return (await membershipLaborByBarber(db, period)).get(userId) ?? 0;
+}
+
+/** Lo mismo para todos los barberos con una sola lectura de los socios (para recorrer muchos meses sin repetir consultas). */
+export async function membershipLaborByBarber(db: Db, period: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (const l of await monthLines(db, period)) if (l.rule) out.set(l.who, (out.get(l.who) ?? 0) + paidFigures(l.paid, l.qty, l.rule).labor);
+  return out;
 }
 
 /** Totales del mes para el panel: ingreso devengado (sesiones × precio), mano de obra por barbero y costo de la bebida entregada. */

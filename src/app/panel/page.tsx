@@ -314,11 +314,14 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <h1 style={{ textTransform: "capitalize" }}>Panel · {monthLabel(month)}</h1>
         <Link className="btn noprint" href={`/panel?mes=${shiftMonth(month, 1)}`} aria-label="Mes siguiente">→</Link>
       </div>
-      <div className="row noprint" style={{ marginBottom: 6 }}>
-        <a className="btn" href={`/api/export?tipo=panel&mes=${month}`} download>Excel del panel</a>
-        <a className="btn" href={`/api/export?tipo=planilla&mes=${month}`} download>Planilla en Excel</a>
-        <PrintButton />
-      </div>
+      <details className="noprint" style={{ marginBottom: 6 }}>
+        <summary className="muted">Exportar o imprimir</summary>
+        <div className="row" style={{ marginTop: 6 }}>
+          <a className="btn" href={`/api/export?tipo=panel&mes=${month}`} download>Excel del panel</a>
+          <a className="btn" href={`/api/export?tipo=planilla&mes=${month}`} download>Planilla en Excel</a>
+          <PrintButton />
+        </div>
+      </details>
       <PanelTabs
         tabs={[
           { id: "resumen", label: "Resumen", badge: attention[0]?.tone === "ok" ? undefined : String(attention.length), content: resumen },

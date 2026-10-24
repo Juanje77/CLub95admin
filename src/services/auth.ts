@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { hashPin, verifyPin } from "../auth/pin";
 import type { Role } from "../domain/types";
@@ -12,7 +13,11 @@ export interface SessionUser extends Actor {
   name: string;
   username: string;
   isBarber: boolean;
+  /** Huella del PIN actual: la sesión deja de valer si se cambia o resetea el PIN. */
+  stamp: string;
 }
+
+const stampOf = (pinHash: string | null) => createHash("sha256").update(pinHash ?? "").digest("base64url").slice(0, 10);
 
 /** Login por usuario y PIN. Tras 5 intentos fallidos la cuenta se bloquea 10 minutos. */
 export async function loginWithPin(db: PrismaClient, username: string, pin: string, now: Date = new Date()): Promise<SessionUser> {
@@ -38,11 +43,11 @@ export async function loginWithPin(db: PrismaClient, username: string, pin: stri
     throw invalid;
   }
   await db.user.update({ where: { id: user.id }, data: { failedAttempts: 0, lockedUntil: null } });
-  return { id: user.id, role: user.role as Role, name: user.name, username: user.username, isBarber: user.isBarber };
+  return { id: user.id, role: user.role as Role, name: user.name, username: user.username, isBarber: user.isBarber, stamp: stampOf(user.pinHash) };
 }
 
 export async function getSessionUser(db: PrismaClient, id: string): Promise<SessionUser | null> {
   const user = await db.user.findUnique({ where: { id } });
   if (!user || user.deletedAt || !user.active) return null;
-  return { id: user.id, role: user.role as Role, name: user.name, username: user.username, isBarber: user.isBarber };
+  return { id: user.id, role: user.role as Role, name: user.name, username: user.username, isBarber: user.isBarber, stamp: stampOf(user.pinHash) };
 }

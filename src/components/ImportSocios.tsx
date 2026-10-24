@@ -114,7 +114,7 @@ export default function ImportSocios() {
           <div style={{ marginTop: 8 }}><Link className="btn primary" href={`/socios?mes=${done.month}`}>Ver los socios</Link></div>
         </div>
       )}
-      <p style={{ marginTop: 12 }}><Link href="/socios">← Volver a Socios</Link></p>
+      <p style={{ marginTop: 12 }}><Link className="btn" href="/socios">← Volver a Socios</Link></p>
       {toast}
     </>
   );

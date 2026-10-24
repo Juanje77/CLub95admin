@@ -4,7 +4,7 @@ import { todayBA } from "../domain/money";
 import type { ServiceCounts, ServiceType } from "../domain/types";
 import { audit, DomainError, isAdmin, type Actor, type Db } from "./common";
 import { loadPricing } from "./figures";
-import { membershipLaborFor } from "./members";
+import { membershipLaborByBarber } from "./members";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const monthRange = (m: string) => ({ gte: `${m}-01`, lte: `${m}-31` });
@@ -31,9 +31,21 @@ export interface BarberMonth {
   balance: number;
 }
 
+/** Lo que se comparte entre varias llamadas para no repetir lecturas: precios y reglas, y lo de los socios de cada mes. */
+export interface PayCtx {
+  pricing: Promise<Awaited<ReturnType<typeof loadPricing>>>;
+  memberLabor: Map<string, Promise<Map<string, number>>>;
+}
+export const newPayCtx = (db: Db): PayCtx => ({ pricing: loadPricing(db), memberLabor: new Map() });
+const laborOf = async (db: Db, ctx: PayCtx, userId: string, month: string) => {
+  let p = ctx.memberLabor.get(month);
+  if (!p) ctx.memberLabor.set(month, (p = membershipLaborByBarber(db, month)));
+  return (await p).get(userId) ?? 0;
+};
+
 /** Cifras de un barbero en un mes, sin guardar nada (a diferencia de la compensación de fin de mes). */
-export async function barberMonth(db: Db, userId: string, month: string): Promise<BarberMonth> {
-  const { tariffs, rules } = await loadPricing(db);
+export async function barberMonth(db: Db, userId: string, month: string, ctx: PayCtx = newPayCtx(db)): Promise<BarberMonth> {
+  const { tariffs, rules } = await ctx.pricing;
   const sales = await db.sale.findMany({ where: { userId, kind: "SERVICE", deletedAt: null, date: monthRange(month) } });
   const byDate = new Map<string, ServiceCounts>();
   for (const s of sales) {
@@ -43,7 +55,7 @@ export async function barberMonth(db: Db, userId: string, month: string): Promis
   }
   let laborServices = 0;
   for (const [date, services] of byDate) laborServices += computeDay({ date, tariffs, barbers: [{ barberId: userId, rules: rules.get(userId) ?? [], services }] }).labor;
-  const laborMembership = await membershipLaborFor(db, userId, month);
+  const laborMembership = await laborOf(db, ctx, userId, month);
 
   const withdrawals = await db.cashBoxEntry.findMany({ where: { userId, kind: "RETIRO_BARBERO", deletedAt: null, date: monthRange(month) } });
   const cashTaken = withdrawals.reduce((a, e) => a - e.amount, 0);
@@ -81,8 +93,8 @@ export interface LedgerRow {
  * Mayor del mes, un renglón por día con movimiento: cobró en su cuenta, debería cobrar, debería enviar (40 % + bebida), lo que recibió del local,
  * lo que envió y saldo acumulado. Parte del saldo que arrastra de meses anteriores (`carried`, con el signo de "se le debe al barbero").
  */
-export async function barberLedger(db: Db, userId: string, month: string, carried: number): Promise<LedgerRow[]> {
-  const { tariffs, rules } = await loadPricing(db);
+export async function barberLedger(db: Db, userId: string, month: string, carried: number, ctx: PayCtx = newPayCtx(db)): Promise<LedgerRow[]> {
+  const { tariffs, rules } = await ctx.pricing;
   const days = new Map<string, { collected: number; entitled: number; received: number; sent: number; members: boolean }>();
   const day = (date: string, members = false) => {
     let d = days.get(date);
@@ -107,7 +119,7 @@ export async function barberLedger(db: Db, userId: string, month: string, carrie
     if (x.amount >= 0) day(x.date).received += x.amount;
     else day(x.date).sent += -x.amount;
   }
-  const labor = await membershipLaborFor(db, userId, month);
+  const labor = await laborOf(db, ctx, userId, month);
   if (labor) day(`${month}-31`, true).entitled += labor;
   let debt = -carried;
   return [...days.entries()]
@@ -161,15 +173,16 @@ export async function getBarberPayables(db: Db, month: string): Promise<BarberPa
   const months: string[] = [];
   if (first) for (let m = first; m < month; m = nextMonth(m)) months.push(m);
 
+  const ctx = newPayCtx(db);
   const barbers: BarberPayable[] = [];
   for (const u of users) {
-    let carried = 0;
-    for (const m of months) carried += (await barberMonth(db, u.id, m)).balance;
-    const cur = await barberMonth(db, u.id, month);
+    const past = await Promise.all(months.map((m) => barberMonth(db, u.id, m, ctx)));
+    const carried = past.reduce((t, x) => t + x.balance, 0);
+    const cur = await barberMonth(db, u.id, month, ctx);
     const selfPaid = u.role === "ADMIN";
     // Un barbero inactivo sin movimientos ni saldo no aporta nada a la lista.
     if (!u.active && cur.entitled === 0 && cur.collected === 0 && carried === 0) continue;
-    barbers.push({ ...cur, userId: u.id, name: u.name, selfPaid, carried, toPay: carried + cur.balance, ledger: await barberLedger(db, u.id, month, carried) });
+    barbers.push({ ...cur, userId: u.id, name: u.name, selfPaid, carried, toPay: carried + cur.balance, ledger: await barberLedger(db, u.id, month, carried, ctx) });
   }
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
   return {

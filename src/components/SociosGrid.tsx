@@ -153,7 +153,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
             </span>
             <span className="num">
               {l.credit > 0 ? `− ${formatARS(l.credit)}` : `+ ${formatARS(l.debit)}`}{" "}
-              <button className="btn danger" style={{ minHeight: 30, padding: "0 8px" }} aria-label="Anular movimiento" onClick={() => { const reason = prompt("Motivo para anular este movimiento:"); if (reason) run(() => voidMemberEntry({ id: l.id, reason })); }}>✕</button>
+              <button className="btn danger" style={{ minHeight: 44, minWidth: 44, padding: "0 8px" }} aria-label="Anular movimiento" onClick={() => { const reason = prompt("Motivo para anular este movimiento:"); if (reason) run(() => voidMemberEntry({ id: l.id, reason })); }}>✕</button>
             </span>
           </li>
         ))}

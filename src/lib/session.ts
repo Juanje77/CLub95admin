@@ -19,13 +19,13 @@ function secret(): string {
 const b64 = (b: Buffer | string) => Buffer.from(b).toString("base64url");
 
 /** Cookie firmada (HMAC-SHA256): `<payload>.<firma>`. El payload solo lleva el id de usuario y el vencimiento. */
-export function signSession(userId: string, now: Date = new Date()): string {
-  const payload = b64(JSON.stringify({ uid: userId, exp: now.getTime() + SESSION_HOURS * 3600_000 }));
+export function signSession(userId: string, now: Date = new Date(), stamp = ""): string {
+  const payload = b64(JSON.stringify({ uid: userId, exp: now.getTime() + SESSION_HOURS * 3600_000, s: stamp }));
   const sig = b64(createHmac("sha256", secret()).update(payload).digest());
   return `${payload}.${sig}`;
 }
 
-export function verifySession(token: string | undefined, now: Date = new Date()): string | null {
+export function readSession(token: string | undefined, now: Date = new Date()): { uid: string; stamp: string } | null {
   if (!token) return null;
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
@@ -33,9 +33,13 @@ export function verifySession(token: string | undefined, now: Date = new Date())
   const got = Buffer.from(sig, "base64url");
   if (got.length !== expected.length || !timingSafeEqual(got, expected)) return null;
   try {
-    const { uid, exp } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { uid: string; exp: number };
-    return exp > now.getTime() ? uid : null;
+    const { uid, exp, s } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { uid: string; exp: number; s?: string };
+    return exp > now.getTime() ? { uid, stamp: s ?? "" } : null;
   } catch {
     return null;
   }
+}
+
+export function verifySession(token: string | undefined, now: Date = new Date()): string | null {
+  return readSession(token, now)?.uid ?? null;
 }

@@ -6,7 +6,7 @@ import { endSession, requireUser, startSession } from "../lib/auth";
 import { db } from "../lib/db";
 import { todayBA } from "../domain/money";
 import type { ServiceType } from "../domain/types";
-import { loginWithPin, type SessionUser } from "../services/auth";
+import { getSessionUser, loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError, isAdmin } from "../services/common";
@@ -39,7 +39,7 @@ const int = (v: unknown) => (typeof v === "number" ? v : Number(String(v ?? "").
 export async function login(_prev: { error?: string } | undefined, form: FormData): Promise<{ error?: string }> {
   try {
     const user = await loginWithPin(db, String(form.get("username") ?? ""), String(form.get("pin") ?? ""));
-    await startSession(user.id);
+    await startSession(user);
   } catch (e) {
     if (e instanceof DomainError) return { error: e.message };
     throw e;
@@ -124,6 +124,9 @@ export async function handOver(p: { amount: number; receivedBy: string; note: st
 export async function changePin(p: { current: string; next: string }) {
   return run(async (user) => {
     await changeOwnPin(db, { userId: user.id, ...p });
+    // Cambiar el PIN cierra las demás sesiones; esta se renueva para no sacar a quien lo cambió.
+    const fresh = await getSessionUser(db, user.id);
+    if (fresh) await startSession(fresh);
     return "PIN actualizado.";
   });
 }

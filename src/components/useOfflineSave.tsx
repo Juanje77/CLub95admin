@@ -89,13 +89,13 @@ export function useOfflineSave() {
       {items.length > 0 && (
         <div className="alert WARN" role="status" data-offline-banner>
           <b>{items.length} cambio{items.length === 1 ? "" : "s"} sin enviar.</b> Se mandan solos cuando vuelva la señal.{" "}
-          <button className="btn" style={{ minHeight: 36, padding: "4px 12px" }} onClick={() => void flush()}>Reintentar ahora</button>
+          <button className="btn" style={{ minHeight: 44, padding: "4px 12px" }} onClick={() => void flush()}>Reintentar ahora</button>
         </div>
       )}
       {rejected.map((msg, i) => (
         <div className="alert ERROR" role="alert" key={i}>
           No se pudo guardar un cambio: {msg}{" "}
-          <button className="btn" style={{ minHeight: 36, padding: "4px 12px" }} onClick={() => setRejected((r) => r.filter((_, j) => j !== i))}>Entendido</button>
+          <button className="btn" style={{ minHeight: 44, padding: "4px 12px" }} onClick={() => setRejected((r) => r.filter((_, j) => j !== i))}>Entendido</button>
         </div>
       ))}
       {error && <div className="toast err" role="status" aria-live="polite">{error}</div>}

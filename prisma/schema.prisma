@@ -263,6 +263,8 @@ model CashCloseLine {
   amount  Int
 
   close CashClose @relation(fields: [closeId], references: [id])
+
+  @@index([closeId])
 }
 
 model ExpenseConcept {
@@ -385,6 +387,9 @@ model MemberLedger {
   deletedAt DateTime?
 
   member Member @relation(fields: [memberId], references: [id])
+
+  @@index([memberId, period])
+  @@index([date])
 }
 
 model AuditLog {
@@ -398,6 +403,7 @@ model AuditLog {
   after    String?
 
   @@index([entity, entityId])
+  @@index([at])
 }
 
 model ImportBatch {

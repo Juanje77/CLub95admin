@@ -50,7 +50,7 @@ export function Mayor({ b }: { b: BarberPayable }) {
     <details open style={{ marginTop: 8 }}>
       <summary><b>Cuenta corriente del mes</b> <span className="muted">(mayor, día por día)</span></summary>
       <div style={{ overflowX: "auto" }}>
-        <table className="grid" aria-label={`Mayor de ${b.name}`}>
+        <table className="grid mayor" aria-label={`Mayor de ${b.name}`}>
           <thead>
             <tr>
               <th className="sticky">Fecha</th>
@@ -154,7 +154,7 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
             <span>{p.name} <span className="muted">· {formatDate(p.date)} · {p.method === "EFECTIVO" ? "efectivo" : "transferencia"}{p.note ? ` · ${p.note}` : ""}</span></span>
             <span className="num">
               {p.amount < 0 ? "Devolvió " : ""}{formatARS(Math.abs(p.amount))}{" "}
-              <button className="btn danger" style={{ minHeight: 30, padding: "0 8px" }} disabled={pending} aria-label="Anular pago" onClick={() => { const reason = prompt("Motivo para anular este pago:"); if (reason) run(() => voidBarberPaymentAction({ id: p.id, reason })); }}>✕</button>
+              <button className="btn danger" style={{ minHeight: 44, minWidth: 44, padding: "0 8px" }} disabled={pending} aria-label="Anular pago" onClick={() => { const reason = prompt("Motivo para anular este pago:"); if (reason) run(() => voidBarberPaymentAction({ id: p.id, reason })); }}>✕</button>
             </span>
           </li>
         ))}

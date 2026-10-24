@@ -122,7 +122,7 @@ export async function getBoxBalance(db: Db): Promise<number> {
  * y deja una alerta para el admin. Cuenta como "ya cobrado" en la compensación mensual.
  */
 export async function addWithdrawal(db: PrismaClient, p: { date: string; actor: Actor; userId: string; amount: number; note?: string }) {
-  if (!Number.isInteger(p.amount) || p.amount <= 0) throw new DomainError("MONTO_INVALIDO", "El retiro debe ser un entero mayor a 0.");
+  if (!Number.isInteger(p.amount) || p.amount <= 0 || p.amount > 100_000_000) throw new DomainError("MONTO_INVALIDO", "El retiro debe ser un entero mayor a 0.");
   if (p.actor.role === "BARBERO" && p.actor.id !== p.userId) throw new DomainError("SOLO_PROPIO", "Un barbero solo puede registrar sus propios retiros.");
   return db.$transaction(async (tx) => {
     const cov = (await getDayCoverage(tx, p.date)).find((c) => c.barberId === p.userId);
@@ -143,7 +143,7 @@ export async function addWithdrawal(db: PrismaClient, p: { date: string; actor: 
 /** Rendición del efectivo acumulado al dueño (fin de semana). Si lo entregado no coincide con el saldo, la nota es obligatoria. */
 export async function rendir(db: PrismaClient, p: { date: string; actor: Actor; handedOver: number; receivedBy: string; note?: string }) {
   if (!isAdmin(p.actor)) throw new DomainError("SOLO_ADMIN", "Solo el admin o el dueño registran la rendición del efectivo.");
-  if (!Number.isInteger(p.handedOver) || p.handedOver <= 0) throw new DomainError("MONTO_INVALIDO", "El monto rendido debe ser un entero mayor a 0.");
+  if (!Number.isInteger(p.handedOver) || p.handedOver <= 0 || p.handedOver > 100_000_000) throw new DomainError("MONTO_INVALIDO", "El monto rendido debe ser un entero mayor a 0.");
   return db.$transaction(async (tx) => {
     const balance = await getBoxBalance(tx);
     const check = checkRendicion(balance, p.handedOver);

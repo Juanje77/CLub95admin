@@ -22,3 +22,28 @@ describe("cookie de sesión firmada", () => {
     expect(verifySession(undefined, NOW)).toBeNull();
   });
 });
+
+describe("sesión atada al PIN", () => {
+  it("la huella del PIN viaja firmada y no se puede cambiar", async () => {
+    const { readSession } = await import("../src/lib/session");
+    const t = signSession("u1", NOW, "abc123");
+    expect(readSession(t, NOW)).toEqual({ uid: "u1", stamp: "abc123" });
+    const [payload, sig] = t.split(".");
+    const forged = Buffer.from(JSON.stringify({ uid: "u1", exp: NOW.getTime() + 1e9, s: "otra" })).toString("base64url");
+    expect(readSession(`${forged}.${sig}`, NOW)).toBeNull();
+    expect(payload).toBeTruthy();
+  });
+
+  it("al cambiar el PIN cambia la huella, así las sesiones viejas dejan de valer", async () => {
+    const { getSessionUser } = await import("../src/services/auth");
+    const { changeOwnPin } = await import("../src/services/admin");
+    const { freshDb, seed } = await import("./helpers/db");
+    const db = freshDb();
+    const ids = await seed(db);
+    const before = (await getSessionUser(db, ids.lucio))!.stamp;
+    expect((await getSessionUser(db, ids.lucio))!.stamp).toBe(before);
+    await changeOwnPin(db, { userId: ids.lucio, current: "1234", next: "7391" });
+    expect((await getSessionUser(db, ids.lucio))!.stamp).not.toBe(before);
+    await db.$disconnect();
+  });
+});
