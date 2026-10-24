@@ -285,6 +285,7 @@ model Expense {
   description   String?
   receiptUrl    String?
   receiptData   String? // foto del comprobante (JPEG reducido, data URL)
+  accountKey    String? // con qué se pagó: clave de PaymentAccount (EFECTIVO, BRUBANK…); null = sin indicar
   source        String    @default("APP")
   importBatchId String?
   createdById   String?

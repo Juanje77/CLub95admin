@@ -58,6 +58,7 @@ export default async function CuentasPage({ searchParams }: { searchParams: Prom
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row spread"><span>Efectivo ingresado en el mes</span><b className="num">{formatARS(data.cashDeclared)}</b></div>
+        <div className="row spread" style={{ marginTop: 6 }}><span>Gastos pagados en efectivo</span><b className="num">− {formatARS(data.cashExpenses)}</b></div>
         <p className="muted" style={{ margin: "6px 0 0" }}>Los cobros de socios en efectivo y las cuentas de bebida, ganancia y efectivo a rendir están en <Link href="/socios?vista=cajas">Socios → Efectivo y cuentas</Link>.</p>
       </div>
     </Shell>

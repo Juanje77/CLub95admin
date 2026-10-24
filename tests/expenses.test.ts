@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, getReceipt, listExpenses, listExtraIncome, recurringStatus, setConceptActive, updateExpense } from "../src/services/expenses";
+import { listExpenseAccounts, addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, getReceipt, listExpenses, listExtraIncome, recurringStatus, setConceptActive, updateExpense } from "../src/services/expenses";
 import { syncAlerts } from "../src/services/alerts";
 import { DomainError, type Actor } from "../src/services/common";
 import { seedCore } from "../src/seed";
@@ -167,5 +167,21 @@ describe("otros ingresos", () => {
     expect((await listExtraIncome(db, "2026-10")).map((r) => r.amount)).toEqual([60000]);
     expect(await code(addExtraIncome(db, { actor: ale, date: "2026-10-03", concept: " ", amount: 5, now: NOW }))).toBe("CONCEPTO_INVALIDO");
     expect(await code(addExtraIncome(db, { actor: lucio, date: "2026-10-03", concept: "x", amount: 5, now: NOW }))).toBe("SOLO_ADMIN");
+  });
+});
+
+describe("con qué se pagó", () => {
+  it("guarda la cuenta, rechaza una inventada, la edita y la resume", async () => {
+    await db.paymentAccount.upsert({ where: { key: "BRUBANK_JUAN" }, update: {}, create: { key: "BRUBANK_JUAN", name: "Brubank Juan", kind: "TRANSFERENCIA" } });
+    const accs = await listExpenseAccounts(db);
+    expect(accs.some((a) => a.key === "BRUBANK_JUAN")).toBe(true);
+    expect(await code(addExpense(db, { actor: ale, date: "2026-10-05", conceptId: luz, amount: 1000, accountKey: "NOPE", now: NOW }))).toBe("CUENTA_INVALIDA");
+    const e = await addExpense(db, { actor: ale, date: "2026-10-05", conceptId: luz, amount: 5000, accountKey: "BRUBANK_JUAN", now: NOW });
+    await addExpense(db, { actor: ale, date: "2026-10-06", conceptId: luz, amount: 2000, now: NOW });
+    const { rows, summary } = await listExpenses(db, { month: "2026-10" });
+    expect(rows.find((r) => r.id === e.id)?.accountKey).toBe("BRUBANK_JUAN");
+    expect(summary.byAccount.find((b) => b.key === "BRUBANK_JUAN")?.total).toBe(5000);
+    await updateExpense(db, { actor: ale, id: e.id, accountKey: null, now: NOW });
+    expect((await db.expense.findUniqueOrThrow({ where: { id: e.id } })).accountKey).toBeNull();
   });
 });

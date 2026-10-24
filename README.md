@@ -140,6 +140,7 @@ Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en 
 
 - **Lista cerrada de conceptos** administrable (reemplaza al control "MAL CARGADO EL CONCEPTO"), con categoría: variable, estructura, inversión o reposición.
 - Alta rápida con fecha, concepto, monto, descripción y **foto del comprobante** (se reduce en el celular antes de subirla; solo la ve admin/dueño).
+- **¿Con qué se pagó?**: al cargar (y al editar) un gasto se elige efectivo o una de las cuentas (recuerda la última usada). Se ve en el listado, en el dashboard de Gastos y del Panel, y en **Cuentas bancarias** cada gasto figura como "Gastos pagados desde esta cuenta" (resta de lo que queda); los de efectivo se muestran aparte. Los gastos viejos quedan "sin indicar".
 - **Gastos fijos recurrentes** (alquiler, luz, internet…): avisan si no se cargaron pasado su día.
 - Filtros por mes y concepto, totales por categoría. Los gastos se borran con baja lógica y quedan en la auditoría.
 - **Otros ingresos** (publicidad, alquiler de yerba) por mes.

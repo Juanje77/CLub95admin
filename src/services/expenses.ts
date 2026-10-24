@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { todayBA } from "../domain/money";
 import { audit, DomainError, isAdmin, type Actor, type Db } from "./common";
+import { accountOwners } from "./bankaccounts";
 
 export const CATEGORIES = ["VARIABLE", "ESTRUCTURA", "INVERSION", "REPOSICION"] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -31,28 +32,47 @@ function checkReceipt(r: string | null | undefined) {
   return r;
 }
 
+/** Cuentas con las que se puede pagar un gasto: efectivo y las cuentas del local (sin las de membresías). */
+export interface ExpenseAccount { key: string; name: string; /** Nombre para mostrar: "Cuenta de Juan · Brubank Juan". */ label: string; cash: boolean }
+export async function listExpenseAccounts(db: Db): Promise<ExpenseAccount[]> {
+  const [accs, owners] = await Promise.all([
+    db.paymentAccount.findMany({ where: { active: true, deletedAt: null, key: { not: { startsWith: "MEMBRESIA" } } }, orderBy: { name: "asc" } }),
+    accountOwners(db),
+  ]);
+  const rows = accs.map((a) => ({ key: a.key, name: a.name, cash: a.kind === "EFECTIVO", label: a.kind === "EFECTIVO" ? "Efectivo" : owners.get(a.key) ? `Cuenta de ${owners.get(a.key)} · ${a.name}` : a.name }));
+  return rows.sort((x, y) => Number(y.cash) - Number(x.cash) || x.label.localeCompare(y.label));
+}
+
+async function checkAccount(db: Db, key: string | null | undefined): Promise<string | null> {
+  if (key === undefined || key === null || key === "") return null;
+  const a = await db.paymentAccount.findUnique({ where: { key } });
+  if (!a || a.deletedAt || !a.active || a.key.startsWith("MEMBRESIA")) throw new DomainError("CUENTA_INVALIDA", "Elegí con qué se pagó: efectivo o una de las cuentas.");
+  return a.key;
+}
+
 // --- Gastos ----------------------------------------------------------------------------------------------------------------
 
 export async function addExpense(
   db: PrismaClient,
-  p: { actor: Actor; date: string; conceptId: string; amount: number; description?: string; receiptData?: string | null; now?: Date },
+  p: { actor: Actor; date: string; conceptId: string; amount: number; description?: string; receiptData?: string | null; accountKey?: string | null; now?: Date },
 ) {
   requireAdmin(p.actor);
   checkDate(p.date, p.now ?? new Date());
   checkAmount(p.amount);
   const receiptData = checkReceipt(p.receiptData);
+  const accountKey = await checkAccount(db, p.accountKey);
   const concept = await db.expenseConcept.findUnique({ where: { id: p.conceptId } });
   if (!concept || concept.deletedAt || !concept.active) throw new DomainError("CONCEPTO_INVALIDO", "Elegí un concepto de la lista.");
   const row = await db.expense.create({
-    data: { date: p.date, conceptId: p.conceptId, amount: p.amount, description: p.description?.trim() || null, receiptData, source: "APP", createdById: p.actor.id },
+    data: { date: p.date, conceptId: p.conceptId, amount: p.amount, description: p.description?.trim() || null, receiptData, accountKey, source: "APP", createdById: p.actor.id },
   });
-  await audit(db, { userId: p.actor.id, entity: "Expense", entityId: row.id, action: "CREATE", after: { date: p.date, concept: concept.name, amount: p.amount } });
+  await audit(db, { userId: p.actor.id, entity: "Expense", entityId: row.id, action: "CREATE", after: { date: p.date, concept: concept.name, amount: p.amount, accountKey } });
   return row;
 }
 
 export async function updateExpense(
   db: PrismaClient,
-  p: { actor: Actor; id: string; date?: string; conceptId?: string; amount?: number; description?: string; now?: Date },
+  p: { actor: Actor; id: string; date?: string; conceptId?: string; amount?: number; description?: string; accountKey?: string | null; now?: Date },
 ) {
   requireAdmin(p.actor);
   const cur = await db.expense.findUnique({ where: { id: p.id } });
@@ -63,11 +83,12 @@ export async function updateExpense(
     const c = await db.expenseConcept.findUnique({ where: { id: p.conceptId } });
     if (!c || c.deletedAt || !c.active) throw new DomainError("CONCEPTO_INVALIDO", "Elegí un concepto de la lista.");
   }
+  const accountKey = p.accountKey !== undefined ? await checkAccount(db, p.accountKey) : undefined;
   const row = await db.expense.update({
     where: { id: p.id },
-    data: { ...(p.date !== undefined ? { date: p.date } : {}), ...(p.conceptId !== undefined ? { conceptId: p.conceptId } : {}), ...(p.amount !== undefined ? { amount: p.amount } : {}), ...(p.description !== undefined ? { description: p.description.trim() || null } : {}) },
+    data: { ...(accountKey !== undefined ? { accountKey } : {}), ...(p.date !== undefined ? { date: p.date } : {}), ...(p.conceptId !== undefined ? { conceptId: p.conceptId } : {}), ...(p.amount !== undefined ? { amount: p.amount } : {}), ...(p.description !== undefined ? { description: p.description.trim() || null } : {}) },
   });
-  await audit(db, { userId: p.actor.id, entity: "Expense", entityId: p.id, action: "UPDATE", before: { date: cur.date, conceptId: cur.conceptId, amount: cur.amount, description: cur.description }, after: { date: row.date, conceptId: row.conceptId, amount: row.amount, description: row.description } });
+  await audit(db, { userId: p.actor.id, entity: "Expense", entityId: p.id, action: "UPDATE", before: { date: cur.date, conceptId: cur.conceptId, amount: cur.amount, description: cur.description, accountKey: cur.accountKey }, after: { date: row.date, conceptId: row.conceptId, amount: row.amount, description: row.description, accountKey: row.accountKey } });
   return row;
 }
 
@@ -89,12 +110,17 @@ export interface ExpenseListRow {
   amount: number;
   description: string | null;
   hasReceipt: boolean;
+  /** Con qué se pagó (clave de la cuenta) y su nombre para mostrar; null = sin indicar. */
+  accountKey: string | null;
+  accountLabel: string | null;
 }
 
 export interface ExpenseSummary {
   total: number;
   byCategory: Record<Category, number>;
   byConcept: { concept: string; category: Category; total: number; count: number }[];
+  /** Gastos del mes según con qué se pagaron ("Sin indicar" para los que no tienen cuenta). */
+  byAccount: { key: string | null; label: string; total: number }[];
 }
 
 export function monthRange(month: string) {
@@ -107,7 +133,10 @@ export async function listExpenses(db: Db, p: { month: string; conceptId?: strin
     include: { concept: true },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
-  const summary: ExpenseSummary = { total: 0, byCategory: { VARIABLE: 0, ESTRUCTURA: 0, INVERSION: 0, REPOSICION: 0 }, byConcept: [] };
+  const accounts = await listExpenseAccounts(db);
+  const labelOf = new Map(accounts.map((a) => [a.key, a.label]));
+  const summary: ExpenseSummary = { total: 0, byCategory: { VARIABLE: 0, ESTRUCTURA: 0, INVERSION: 0, REPOSICION: 0 }, byConcept: [], byAccount: [] };
+  const byAccount = new Map<string, { key: string | null; label: string; total: number }>();
   const byConcept = new Map<string, { concept: string; category: Category; total: number; count: number }>();
   for (const e of all) {
     const cat = e.concept.category as Category;
@@ -117,11 +146,16 @@ export async function listExpenses(db: Db, p: { month: string; conceptId?: strin
     cur.total += e.amount;
     cur.count++;
     byConcept.set(e.concept.name, cur);
+    const ak = e.accountKey ?? "";
+    const acc = byAccount.get(ak) ?? { key: e.accountKey, label: e.accountKey ? labelOf.get(e.accountKey) ?? e.accountKey : "Sin indicar", total: 0 };
+    acc.total += e.amount;
+    byAccount.set(ak, acc);
   }
+  summary.byAccount = [...byAccount.values()].sort((a, b) => b.total - a.total);
   summary.byConcept = [...byConcept.values()].sort((a, b) => b.total - a.total);
   const rows = all
     .filter((e) => !p.conceptId || e.conceptId === p.conceptId)
-    .map((e) => ({ id: e.id, date: e.date, conceptId: e.conceptId, concept: e.concept.name, category: e.concept.category as Category, amount: e.amount, description: e.description, hasReceipt: !!e.receiptData }));
+    .map((e) => ({ id: e.id, date: e.date, conceptId: e.conceptId, concept: e.concept.name, category: e.concept.category as Category, amount: e.amount, description: e.description, hasReceipt: !!e.receiptData, accountKey: e.accountKey, accountLabel: e.accountKey ? labelOf.get(e.accountKey) ?? e.accountKey : null }));
   return { rows, summary };
 }
 

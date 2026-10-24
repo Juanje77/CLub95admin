@@ -193,14 +193,14 @@ export async function adminProductSettings(p: { productId: string; minStock?: nu
 
 // --- Gastos ----------------------------------------------------------------------------------------------------------------------
 
-export async function saveExpense(p: { date: string; conceptId: string; amount: number; description: string; receiptData: string | null }) {
+export async function saveExpense(p: { date: string; conceptId: string; amount: number; description: string; receiptData: string | null; accountKey: string | null }) {
   return run(async (actor) => {
     await addExpense(db, { actor, ...p, amount: int(p.amount) });
     return "Gasto cargado.";
   });
 }
 
-export async function editExpense(p: { id: string; date: string; conceptId: string; amount: number; description: string }) {
+export async function editExpense(p: { id: string; date: string; conceptId: string; amount: number; description: string; accountKey?: string | null }) {
   return run(async (actor) => {
     await updateExpense(db, { actor, ...p, amount: int(p.amount) });
     return "Gasto actualizado.";

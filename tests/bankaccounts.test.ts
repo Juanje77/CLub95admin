@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
+import { addExpense } from "../src/services/expenses";
 import { getBankAccounts } from "../src/services/bankaccounts";
 import { setDeclared, setProductCount, setServiceCount } from "../src/services/grid";
 import { createMember, registerPayment } from "../src/services/members";
@@ -58,6 +59,16 @@ describe("cuentas bancarias: por dónde entra la plata", () => {
     await setDeclared(db, { actor: admin, date: DAY, account: "BRUBANK", amount: 70000, now: NOW });
     const after = (await getBankAccounts(db, "2026-10", NOW)).accounts.find((a) => a.key === "BRUBANK")!;
     expect(after).toMatchObject({ declared: 70000, expectedTotal: 80000, gap: -10000, payoutsTotal: 47600, remaining: 22400 });
+  });
+
+  it("los gastos pagados con una cuenta se descuentan de lo que queda; los de efectivo se muestran aparte", async () => {
+    const c = await db.expenseConcept.create({ data: { name: "TEST", category: "VARIABLE" } });
+    await addExpense(db, { actor: admin, date: DAY, conceptId: c.id, amount: 4000, accountKey: "BRUBANK_JUAN", now: NOW });
+    await addExpense(db, { actor: admin, date: DAY, conceptId: c.id, amount: 1500, accountKey: "EFECTIVO", now: NOW });
+    const r = await getBankAccounts(db, "2026-10", NOW);
+    const j = r.accounts.find((a) => a.key === "BRUBANK_JUAN")!;
+    expect(j.payouts).toContainEqual({ label: "Gastos pagados desde esta cuenta", amount: 4000 });
+    expect(r.cashExpenses).toBe(1500);
   });
 
   it("lo ingresado de cada día se compara con lo esperado: la diferencia es lo que se pagó en efectivo", async () => {

@@ -58,6 +58,13 @@ export interface BankAccounts {
   accounts: BankAccountView[];
   /** Efectivo ingresado en el mes (cierres de caja). */
   cashDeclared: number;
+  /** Gastos del mes pagados en efectivo. */
+  cashExpenses: number;
+}
+
+/** De quién es cada cuenta según el recorrido (clave → "Juan", "Ale"…), para mostrar nombres. */
+export async function accountOwners(db: Db): Promise<Map<string, string>> {
+  return new Map((await loadRouting(db)).map((r) => [r.key, r.who.replace(/ \(.*\)$/, "")]));
 }
 
 async function loadRouting(db: Db): Promise<Route[]> {
@@ -72,13 +79,16 @@ async function loadRouting(db: Db): Promise<Route[]> {
 }
 
 export async function getBankAccounts(db: Db, month: string, now: Date = new Date()): Promise<BankAccounts> {
-  const [grid, users, accounts, routing, memberPays] = await Promise.all([
+  const [grid, users, accounts, routing, memberPays, expenses] = await Promise.all([
     getMonthGrid(db as PrismaClient, month, now),
     db.user.findMany({ where: { isBarber: true } }),
     db.paymentAccount.findMany({ where: { deletedAt: null } }),
     loadRouting(db),
     db.memberLedger.findMany({ where: { deletedAt: null, kind: "PAGO", method: "BANCO", date: { gte: `${month}-01`, lte: `${month}-31` } } }),
+    db.expense.findMany({ where: { deletedAt: null, accountKey: { not: null }, date: { gte: `${month}-01`, lte: `${month}-31` } }, select: { accountKey: true, amount: true } }),
   ]);
+  const spentBy = new Map<string, number>();
+  for (const e of expenses) spentBy.set(e.accountKey!, (spentBy.get(e.accountKey!) ?? 0) + e.amount);
   const idOf = new Map(users.map((u) => [u.username, u.id]));
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
   const accName = new Map(accounts.map((a) => [a.key, a.name]));
@@ -117,10 +127,12 @@ export async function getBankAccounts(db: Db, month: string, now: Date = new Dat
       const name = id ? nameOf.get(id) : u;
       return { label: u === r.owner ? `Retiro de ${name} (su parte de los cortes)` : `Pago a ${name} (su parte de los cortes)`, amount: id ? labor.get(id) ?? 0 : 0 };
     });
+    const spent = spentBy.get(r.key) ?? 0;
+    if (spent > 0) payouts.push({ label: "Gastos pagados desde esta cuenta", amount: spent });
     const expectedTotal = expected.reduce((s, l) => s + l.amount, 0);
     const payoutsTotal = payouts.reduce((s, l) => s + l.amount, 0);
     const declared = declaredBy.get(r.key) ?? 0;
     return { key: r.key, name: accName.get(r.key) ?? r.key, who: r.who, expected, expectedTotal, declared, gap: declared - expectedTotal, payouts, payoutsTotal, remaining: declared - payoutsTotal };
   });
-  return { month, accounts: views, cashDeclared };
+  return { month, accounts: views, cashDeclared, cashExpenses: spentBy.get("EFECTIVO") ?? 0 };
 }

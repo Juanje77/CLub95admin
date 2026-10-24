@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { editExpense, removeExpense, removeExtraIncome, removeRecurring, saveConcept, saveExpense, saveExtraIncome, saveRecurring, toggleConcept } from "../app/actions";
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import { compressToJpeg } from "../lib/image";
@@ -29,6 +29,8 @@ interface Props {
   extra: ExtraView[];
   /** Conceptos más usados (ids), para los botones de carga rápida. */
   topConcepts: string[];
+  /** Cuentas con las que se puede pagar (la de efectivo primero). */
+  accounts: { key: string; label: string }[];
   prevTotal: number;
 }
 
@@ -45,7 +47,21 @@ function ConceptSelect({ concepts, value, onChange }: { concepts: ConceptView[];
   );
 }
 
-function NewExpenseForm({ concepts, topConcepts, today, preset }: { concepts: ConceptView[]; topConcepts: string[]; today: string; preset: { conceptId: string; amount: string; n: number } }) {
+const ACCOUNT_MEMORY = "c95.expenseAccount";
+function rememberedAccount(accounts: { key: string }[]): string {
+  try {
+    const k = window.localStorage.getItem(ACCOUNT_MEMORY);
+    if (k && accounts.some((a) => a.key === k)) return k;
+  } catch {
+    /* sin almacenamiento: se usa el primero */
+  }
+  return accounts[0]?.key ?? "";
+}
+
+function NewExpenseForm({ concepts, topConcepts, accounts, today, preset }: { concepts: ConceptView[]; topConcepts: string[]; accounts: { key: string; label: string }[]; today: string; preset: { conceptId: string; amount: string; n: number } }) {
+  const [accountKey, setAccountKey] = useState(accounts[0]?.key ?? "");
+  // La última cuenta usada queda elegida la próxima vez (se lee después de montar para no desfasar el servidor).
+  useEffect(() => { setAccountKey(rememberedAccount(accounts)); }, [accounts]);
   const [date, setDate] = useState(today);
   const [conceptId, setConceptId] = useState(preset.conceptId);
   const [amount, setAmount] = useState(preset.amount);
@@ -68,7 +84,7 @@ function NewExpenseForm({ concepts, topConcepts, today, preset }: { concepts: Co
       className="card"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => saveExpense({ date, conceptId, amount: num(amount), description, receiptData: photo }), () => { setConceptId(""); setAmount(""); setDescription(""); setPhoto(null); setDate(today); if (fileRef.current) fileRef.current.value = ""; });
+        run(() => saveExpense({ date, conceptId, amount: num(amount), description, receiptData: photo, accountKey: accountKey || null }), () => { try { window.localStorage.setItem(ACCOUNT_MEMORY, accountKey); } catch { /* ok */ } setConceptId(""); setAmount(""); setDescription(""); setPhoto(null); setDate(today); if (fileRef.current) fileRef.current.value = ""; });
       }}
     >
       <div className="field"><span>1. ¿En qué fue?</span></div>
@@ -81,7 +97,13 @@ function NewExpenseForm({ concepts, topConcepts, today, preset }: { concepts: Co
       )}
       <label className="field"><span>{quick.length > 0 ? "Otro concepto" : "Concepto"}</span><ConceptSelect concepts={concepts} value={quick.some((c) => c.id === conceptId) ? "" : conceptId} onChange={setConceptId} /></label>
       <label className="field"><span>2. Monto ($)</span><input inputMode="numeric" className="bigmoney" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></label>
-      <button className="big gold" type="submit" disabled={pending || !conceptId || num(amount) <= 0}>
+      <div className="field"><span>3. ¿Con qué se pagó?</span></div>
+      <div className="quick" role="group" aria-label="Con qué se pagó">
+        {accounts.map((a) => (
+          <button key={a.key} type="button" className={`pill ${a.key === accountKey ? "on" : ""}`} aria-pressed={a.key === accountKey} onClick={() => setAccountKey(a.key)}>{a.label}</button>
+        ))}
+      </div>
+      <button className="big gold" type="submit" disabled={pending || !conceptId || num(amount) <= 0 || !accountKey}>
         {selected && num(amount) > 0 ? `Guardar ${selected.name} · ${formatARS(num(amount))}` : "Guardar gasto"}
       </button>
       <details className="more">
@@ -116,28 +138,30 @@ function NewExpenseForm({ concepts, topConcepts, today, preset }: { concepts: Co
   );
 }
 
-function ExpenseRowView({ r, concepts, today, onRemove }: { r: ExpenseListRow; concepts: ConceptView[]; today: string; onRemove: (id: string) => void }) {
+function ExpenseRowView({ r, concepts, accounts, today, onRemove }: { r: ExpenseListRow; concepts: ConceptView[]; accounts: { key: string; label: string }[]; today: string; onRemove: (id: string) => void }) {
   const [date, setDate] = useState(r.date);
   const [conceptId, setConceptId] = useState(r.conceptId);
   const [amount, setAmount] = useState(String(r.amount));
   const [description, setDescription] = useState(r.description ?? "");
+  const [accountKey, setAccountKey] = useState(r.accountKey ?? "");
   const { pending, run, toast } = useAction();
   return (
     <li style={{ display: "block" }}>
       <div className="row spread">
         <span>
-          <b>{r.concept}</b> <span className="muted">· {formatDate(r.date)}{r.description ? ` · ${r.description}` : ""}</span>
+          <b>{r.concept}</b> <span className="muted">· {formatDate(r.date)} · {r.accountLabel ?? "sin indicar con qué se pagó"}{r.description ? ` · ${r.description}` : ""}</span>
           {r.hasReceipt && <> <a href={`/api/comprobante/${r.id}`} target="_blank" rel="noreferrer" aria-label="Ver comprobante">📎</a></>}
         </span>
         <span className="num">{formatARS(r.amount)}</span>
       </div>
       <details>
         <summary className="muted">Editar o borrar</summary>
-        <form onSubmit={(e) => { e.preventDefault(); run(() => editExpense({ id: r.id, date, conceptId, amount: num(amount), description })); }}>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => editExpense({ id: r.id, date, conceptId, amount: num(amount), description, accountKey: accountKey || null })); }}>
           <label className="field"><span>Fecha</span><input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
           <label className="field"><span>Concepto</span><ConceptSelect concepts={concepts} value={conceptId} onChange={setConceptId} /></label>
           <label className="field"><span>Monto ($)</span><input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
           <label className="field"><span>Descripción</span><input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+          <label className="field"><span>Con qué se pagó</span><select value={accountKey} onChange={(e) => setAccountKey(e.target.value)}><option value="">Sin indicar</option>{accounts.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}</select></label>
           <div className="row">
             <button className="btn primary" type="submit" disabled={pending || num(amount) <= 0}>Guardar cambios</button>
             <button className="btn danger" type="button" disabled={pending} onClick={() => { if (confirm("¿Borrar este gasto? Queda registrado quién lo borró.")) onRemove(r.id); }}>Borrar</button>
@@ -175,7 +199,7 @@ export default function GastosClient(p: Props) {
       </div>
 
       <h2>Cargar un gasto</h2>
-      <NewExpenseForm concepts={p.concepts} topConcepts={p.topConcepts} today={p.today} preset={preset} />
+      <NewExpenseForm concepts={p.concepts} topConcepts={p.topConcepts} accounts={p.accounts} today={p.today} preset={preset} />
 
       {p.recurring.length > 0 && (
         <>
@@ -208,6 +232,12 @@ export default function GastosClient(p: Props) {
         </div>
         <h3 style={{ margin: "12px 0 6px" }}>Por categoría</h3>
         <HBars ariaLabel="Gastos del mes por categoría" items={CAT_ORDER.map((c) => ({ label: CAT_LABEL[c], value: p.summary.byCategory[c] }))} />
+        {p.summary.byAccount.length > 0 && (
+          <>
+            <h3 style={{ margin: "12px 0 6px" }}>Con qué se pagó</h3>
+            <HBars ariaLabel="Gastos del mes según con qué se pagaron" items={p.summary.byAccount.map((a) => ({ label: a.label, value: a.total }))} />
+          </>
+        )}
         {p.summary.byConcept.length > 0 && (
           <>
             <h3 style={{ margin: "12px 0 6px" }}>Por concepto</h3>
@@ -226,7 +256,7 @@ export default function GastosClient(p: Props) {
         </select>
       </label>
       <ul className="list card" style={{ padding: "4px 14px" }}>
-        {p.rows.map((r) => <ExpenseRowView key={r.id} r={r} concepts={p.concepts} today={p.today} onRemove={(id) => run(() => removeExpense({ id }))} />)}
+        {p.rows.map((r) => <ExpenseRowView key={r.id} r={r} concepts={p.concepts} accounts={p.accounts} today={p.today} onRemove={(id) => run(() => removeExpense({ id }))} />)}
         {p.rows.length === 0 && <li className="muted">No hay gastos cargados {p.conceptFilter ? "de ese concepto " : ""}este mes.</li>}
       </ul>
 

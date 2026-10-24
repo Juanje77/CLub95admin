@@ -226,6 +226,10 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       <div className="card">
         <HBars ariaLabel="Gastos del mes por categoría" items={(Object.keys(CATEGORY_LABEL) as (keyof typeof CATEGORY_LABEL)[]).map((c) => ({ label: CATEGORY_LABEL[c], value: exp.summary.byCategory[c] }))} />
       </div>
+      <h2>Con qué se pagó</h2>
+      <div className="card">
+        {exp.summary.byAccount.length === 0 ? <p className="muted" style={{ margin: 0 }}>Todavía no hay gastos cargados este mes.</p> : <HBars ariaLabel="Gastos del mes según con qué se pagaron" items={exp.summary.byAccount.map((a) => ({ label: a.label, value: a.total }))} />}
+      </div>
       <h2>Por concepto</h2>
       <div className="card">
         {exp.summary.byConcept.length === 0 ? <p className="muted" style={{ margin: 0 }}>Todavía no hay gastos cargados este mes.</p> : <HBars ariaLabel="Gastos del mes por concepto" items={exp.summary.byConcept.slice(0, 10).map((c) => ({ label: c.concept, value: c.total, hint: `${c.count} carga${c.count === 1 ? "" : "s"}` }))} />}

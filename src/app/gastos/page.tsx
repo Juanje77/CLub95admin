@@ -3,7 +3,7 @@ import Shell from "../../components/Shell";
 import { shiftMonth, todayBA } from "../../domain/money";
 import { requireAdmin } from "../../lib/auth";
 import { db } from "../../lib/db";
-import { listExpenses, listExtraIncome, recurringStatus, type Category } from "../../services/expenses";
+import { listExpenseAccounts, listExpenses, listExtraIncome, recurringStatus, type Category } from "../../services/expenses";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +13,14 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
   const today = todayBA();
   const month = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : today.slice(0, 7);
   const since = shiftMonth(month, -2) + "-01";
-  const [{ rows, summary }, prev, recent, concepts, recurring, extra] = await Promise.all([
+  const [{ rows, summary }, prev, recent, concepts, recurring, extra, accounts] = await Promise.all([
     listExpenses(db, { month, conceptId: sp.concepto || undefined }),
     listExpenses(db, { month: shiftMonth(month, -1) }),
     db.expense.findMany({ where: { deletedAt: null, date: { gte: since } }, select: { conceptId: true } }),
     db.expenseConcept.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
     recurringStatus(db, month),
     listExtraIncome(db, month),
+    listExpenseAccounts(db),
   ]);
   const uses = new Map<string, number>();
   for (const e of recent) uses.set(e.conceptId, (uses.get(e.conceptId) ?? 0) + 1);
@@ -40,6 +41,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
         recurring={recurring}
         extra={extraViews}
         topConcepts={topConcepts}
+        accounts={accounts.map((a) => ({ key: a.key, label: a.label }))}
         prevTotal={prev.summary.total}
       />
     </Shell>
