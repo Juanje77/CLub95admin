@@ -398,6 +398,16 @@ await page.getByRole("heading", { name: "Pagos y devoluciones de este mes" }).wa
 await page.waitForFunction(() => /Lucio/.test([...document.querySelectorAll("ul.list.card")].pop()?.textContent ?? ""));
 check(true, "el pago a Lucio queda registrado y baja lo que falta");
 await shot("a-pagar-barberos");
+// Con datos (el mayor es una tabla ancha) la página no debe desbordar ni en celular ni en computadora.
+const noHScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+check(await noHScroll(), "A pagar a los barberos no desborda en celular");
+await page.setViewportSize({ width: 1280, height: 800 });
+await page.reload();
+await page.getByRole("heading", { name: /A pagar · octubre 2026/i }).waitFor();
+check(await noHScroll(), "A pagar a los barberos no desborda en computadora (las tarjetas en dos columnas respetan el ancho)");
+const cards = await page.locator("section.card[aria-label^='Barbero']").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+check(cards.every((r) => r <= 1281), "las tarjetas de barberos caben en la pantalla");
+await page.setViewportSize({ width: 390, height: 844 });
 
 // 9h. Eliminar socios (por ejemplo, los importados de más): elegir varios y borrarlos con motivo
 await page.getByRole("link", { name: "Socios", exact: true }).click();

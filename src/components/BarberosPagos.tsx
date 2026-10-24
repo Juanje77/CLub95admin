@@ -106,7 +106,7 @@ export default function BarberosPagos({ data, today, prevMonth, nextMonth }: { d
     <>
       <div className="monthnav">
         <Link className="btn" href={`/barberos?mes=${prevMonth}`} aria-label="Mes anterior">←</Link>
-        <h1 style={{ textTransform: "capitalize" }}>A pagar · {monthLabel(data.month)}</h1>
+        <h1>A pagar · <span style={{ textTransform: "capitalize" }}>{monthLabel(data.month)}</span></h1>
         <Link className="btn" href={`/barberos?mes=${nextMonth}`} aria-label="Mes siguiente">→</Link>
       </div>
 
