@@ -10,6 +10,7 @@ import { loginWithPin, type SessionUser } from "../services/auth";
 import { addWithdrawal, markClosedDay, reopenDay, rendir } from "../services/closing";
 import { closeDayFromGrid, setChangeLeft, setDeclared, setMembershipCount, setProductCount, setServiceCount } from "../services/grid";
 import { DomainError, isAdmin } from "../services/common";
+import { addBarberPayment, voidBarberPayment } from "../services/barberpay";
 import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
 import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
@@ -373,5 +374,21 @@ export async function voidFundEntryAction(p: { id: string; reason: string }) {
   return run(async (actor) => {
     await voidFundEntry(db, { actor, ...p });
     return "Movimiento anulado.";
+  });
+}
+
+// --- Pagos a los barberos -------------------------------------------------------------------------------------------------------
+
+export async function saveBarberPayment(p: { userId: string; date: string; amount: number; method: string; note: string }) {
+  return run(async (actor) => {
+    await addBarberPayment(db, { actor, ...p, amount: int(p.amount) });
+    return "Pago registrado.";
+  });
+}
+
+export async function voidBarberPaymentAction(p: { id: string; reason: string }) {
+  return run(async (actor) => {
+    await voidBarberPayment(db, { actor, ...p });
+    return "Pago anulado.";
   });
 }

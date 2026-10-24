@@ -169,9 +169,12 @@ describe("la planilla de socios: sesiones del mes, cobro imputado y estado", () 
     ]);
     expect(await row(m1)).toMatchObject({ balance: 184500, carried: 118500, oldestUnpaid: "2026-08" });
   });
-  it("el aporte al barbero y al local sale de las sesiones cargadas a mano", async () => {
-    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 }); // Jere: (16.500 − 1.500) × 60% = 9.000 por sesión
-    expect(await row(m1)).toMatchObject({ barberShare: 36000, localShare: 30000 });
+  it("el aporte al barbero y al local sale de lo cobrado por las sesiones cargadas a mano", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 });
+    expect(await row(m1)).toMatchObject({ barberShare: 0, localShare: 0, drink: 6000 }); // sin cobro no hay base
+    await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 66000, method: "BANCO", period: "2026-10", now: NOW });
+    // 66.000 − bebida (4 × 1.500 = 6.000) = 60.000 → Jere 60 % = 36.000, local 40 % = 24.000
+    expect(await row(m1)).toMatchObject({ barberShare: 36000, localShare: 24000, drink: 6000 });
     expect(await membershipLaborFor(db, ids.jere, "2026-10")).toBe(36000);
     const t = await membershipMonthTotals(db, "2026-10");
     expect(t).toMatchObject({ visits: 4, income: 66000, drinkCost: 4 * 1500 });
@@ -247,17 +250,21 @@ describe("cuándo paga cada socio: principio o fin de mes", () => {
 });
 
 describe("aporte al barbero y al local", () => {
-  it("(precio − bebida) × comisión para el barbero que lo atendió; el resto para el local", async () => {
-    await setAttendance(db, { actor: lucio, memberId: m1, date: TODAY, present: true, now: NOW }); // 16.500: base 13.500 → Lucio 8.100
-    await setAttendance(db, { actor: jere, memberId: m2, date: TODAY, present: true, now: NOW }); //  15.000: base 13.500 → Jere 8.100
-    const a = await row(m1);
-    expect(a).toMatchObject({ barberShare: 8100, localShare: 8400 });
-    const b = await row(m2);
-    expect(b).toMatchObject({ barberShare: 8100, localShare: 6900 });
+  it("de lo cobrado se saca la bebida × los cortes y a lo que queda 60 % para el barbero que lo atendió y 40 % para el local", async () => {
+    await setAttendance(db, { actor: lucio, memberId: m1, date: TODAY, present: true, now: NOW });
+    await setAttendance(db, { actor: jere, memberId: m2, date: TODAY, present: true, now: NOW });
+    await registerPayment(db, { actor: ale, memberId: m1, date: TODAY, amount: 16500, method: "BANCO", period: "2026-10", now: NOW });
+    await registerPayment(db, { actor: ale, memberId: m2, date: TODAY, amount: 15000, method: "BANCO", period: "2026-10", now: NOW });
+    const a = await row(m1); // lo atendió Lucio (bebida $ 3.000): base 13.500 → 60 % = 8.100, local 5.400
+    expect(a).toMatchObject({ barberShare: 8100, localShare: 5400, drink: 3000 });
+    const b = await row(m2); // lo atendió Jere (bebida $ 1.500): base 13.500 → 8.100, local 5.400
+    expect(b).toMatchObject({ barberShare: 8100, localShare: 5400, drink: 1500 });
   });
   it("lo del mes por barbero alimenta la compensación de fin de mes automáticamente", async () => {
     await setAttendance(db, { actor: ale, memberId: m1, date: "2026-10-02", present: true, barberId: ids.lucio, now: NOW });
     await setAttendance(db, { actor: ale, memberId: m2, date: "2026-10-02", present: true, barberId: ids.lucio, now: NOW });
+    await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-02", amount: 16500, method: "BANCO", period: "2026-10", now: NOW });
+    await registerPayment(db, { actor: ale, memberId: m2, date: "2026-10-02", amount: 15000, method: "BANCO", period: "2026-10", now: NOW });
     expect(await membershipLaborFor(db, ids.lucio, "2026-10")).toBe(8100 + 7200);
     const s = await computeSettlement(db, { userId: ids.lucio, period: "2026-10" });
     expect(s.settlement.laborMembership).toBe(15300);

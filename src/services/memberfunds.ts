@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { FUND_KINDS, FUNDS, sessionFigures, type Fund } from "../domain/memberfunds";
+import { FUND_KINDS, FUNDS, paidFigures, type Fund } from "../domain/memberfunds";
 import { todayBA } from "../domain/money";
 import { audit, DomainError, isAdmin, type Actor, type Db } from "./common";
 import { allMemberLines } from "./members";
@@ -78,7 +78,7 @@ export async function getMemberFunds(db: Db, month: string): Promise<MemberFunds
     const r = row(l.month);
     r.sessions += l.qty;
     if (!l.rule) continue;
-    const f = sessionFigures(l.price, l.qty, l.rule);
+    const f = paidFigures(l.paid, l.qty, l.rule);
     r.drink += f.drink;
     if (aleIds.has(l.who)) r.aleCuts += f.labor;
     if (profitIds.has(l.who)) r.profit += f.profit;

@@ -83,9 +83,15 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
         <span>A cobrar del mes</span><b className="num">{formatARS(m.charged)}</b>
         <span>Cobrado para este mes</span><b className="num">{formatARS(m.paid)}</b>
         <span>Debía de meses anteriores</span><b className="num">{formatARS(m.carried)}</b>
-        <span>Le corresponde al barbero</span><b className="num">{formatARS(m.barberShare)}</b>
-        <span>Queda para el local</span><b className="num">{formatARS(m.localShare)}</b>
       </div>
+      <h3 style={{ margin: "12px 0 4px", fontSize: ".95rem" }}>Reparto de lo cobrado</h3>
+      <div className="kv">
+        <span>Cobrado</span><b className="num">{formatARS(m.paid)}</b>
+        <span>− Bebida ({m.visits} corte{m.visits === 1 ? "" : "s"} del mes)</span><b className="num">{formatARS(m.drink)}</b>
+        <span>Barbero ({m.barberName})</span><b className="num">{formatARS(m.barberShare)}</b>
+        <span>Local</span><b className="num">{formatARS(m.localShare)}</b>
+      </div>
+      <p className="muted" style={{ margin: "4px 0 0", fontSize: ".78rem" }}>A lo cobrado se le saca la bebida por los cortes del mes y a lo que queda se le aplica el porcentaje del barbero (60 %); el resto es del local (40 %). La bebida va a la cuenta de bebida.</p>
 
       <details open>
         <summary><b>Registrar un cobro</b></summary>

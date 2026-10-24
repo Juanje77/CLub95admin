@@ -45,7 +45,8 @@ export async function computeSettlement(db: PrismaClient, p: { userId: string; p
   // Lo que le toca por los socios que atendió sale de la asistencia; se puede pisar a mano pasando `laborMembership`.
   const laborMembership = p.laborMembership ?? (await membershipLaborFor(db, p.userId, p.period));
   const adjustments = p.adjustments ?? existing?.adjustments ?? 0;
-  const collected = cashTaken + ownTransfers;
+  const paidByLocal = (await db.barberPayment.findMany({ where: { userId: p.userId, deletedAt: null, date: monthRange(p.period) } })).reduce((a, x) => a + x.amount, 0);
+  const collected = cashTaken + ownTransfers + paidByLocal;
   const result = settle({ laborServices, laborMembership, adjustments, collected });
   const data = { laborServices, laborMembership, adjustments, collected, balance: result.balance, status: "DRAFT", note: p.note ?? existing?.note ?? null, deletedAt: null };
   const row = existing

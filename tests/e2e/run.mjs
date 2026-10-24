@@ -380,6 +380,22 @@ const aleCard = await page.getByRole("region", { name: "Cuenta de Ale" }).innerT
 check(/Cortes de Lucio/.test(aleCard) && /Cortes de Ale/.test(aleCard) && /Pago a Lucio/.test(aleCard) && /Retiro de Ale/.test(aleCard), "la cuenta de Ale junta los cortes de Lucio y de Ale; de ahí sale el 60 % de Lucio y el retiro de Ale");
 await shot("cuentas-bancarias");
 
+// 9g. A pagar a los barberos: lo que les corresponde, lo ya cobrado y el registro de pagos
+await page.getByRole("link", { name: "Más", exact: true }).click();
+await page.getByRole("link", { name: /A pagar a los barberos/ }).click();
+await page.getByRole("heading", { name: /A pagar · octubre 2026/i }).waitFor();
+await page.getByRole("region", { name: "Total a pagar a los barberos" }).waitFor();
+const lucioPay = page.getByRole("region", { name: "Barbero Lucio" });
+check(/Cortes de la planilla/.test(await lucioPay.innerText()) && /Falta pagarle/.test(await lucioPay.innerText()), "Lucio: se ve lo que le corresponde y lo que falta pagarle");
+check(/Retira de su cuenta/.test(await page.getByRole("region", { name: "Barbero Ale" }).innerText()), "Ale retira su parte de su cuenta: no suma a lo que hay que pagar");
+await lucioPay.getByLabel("Monto ($)").fill("1000");
+await lucioPay.getByRole("button", { name: "Registrar pago" }).click();
+await page.getByText("Pago registrado.").first().waitFor();
+await page.getByRole("heading", { name: "Pagos registrados este mes" }).waitFor();
+await page.waitForFunction(() => /Lucio/.test([...document.querySelectorAll("ul.list.card")].pop()?.textContent ?? ""));
+check(true, "el pago a Lucio queda registrado y baja lo que falta");
+await shot("a-pagar-barberos");
+
 // 10. Configuración (admin): resetear PIN, ajustar stock, cambiar el propio PIN
 await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /Configuración/ }).click();

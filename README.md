@@ -38,7 +38,7 @@ Reglas de permisos: un barbero carga **lo suyo y solo hoy**; cargar un día pasa
 | Tarifas (iguales para todos) | Corte $ 20.000 · Corte y barba $ 22.000 · Barba y cejas $ 15.000 |
 | Bebida incluida (se descuenta antes de la comisión) | Jere $ 1.500 · Ale y Lucio $ 3.000 |
 | Comisión | Jere 60% · Lucio 60% (mismas condiciones que Beni, a confirmar) · Ale 100% (administración): $ 17.000 / $ 19.000 por corte / corte y barba |
-| Membresía | Black $ 16.250 / $ 17.500 · Gold $ 20.000 / $ 23.000 (corte / corte y barba) **por sesión**; el barbero cobra (precio − bebida) × su comisión |
+| Membresía | Black $ 16.250 / $ 17.500 · Gold $ 20.000 / $ 23.000 (corte / corte y barba) **por sesión**; el barbero cobra el **60 % de lo que paga el socio menos la bebida × los cortes del mes** |
 
 Nada de esto está fijo en el código: vive en tablas con **vigencia por fecha** (`Tariff`, `BarberRule`, `ProductPrice`, `MemberPrice`) y se cambia desde *Configuración*. Un cambio rige desde su fecha; el pasado no se reescribe (solo el dueño puede corregir hacia atrás).
 Moneda ARS sin decimales (`$ 12.500`), fechas `dd/mm/aaaa`, zona horaria `America/Argentina/Buenos_Aires`.
@@ -80,8 +80,17 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 - **Cuenta corriente** (si un socio no paga): lo que no se paga **se arrastra de un mes al siguiente** y queda a la vista en "quién debe" (con desde qué mes) y, por socio, en una tabla mes a mes con saldo acumulado.
 - **Cobros:** llevan medio (efectivo / banco) y **no entran a la caja del día**: van al panel *Efectivo y cuentas* de Socios. El campo **Corresponde a** (la columna MES QUE CORRESPONDE) indica el mes de servicio que cubre: mes anterior, actual o siguiente; si se deja en automático, cubre el mes **más viejo que debe** (y si no debe nada, queda como pago adelantado).
 - Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).
-- El **barbero** cobra (precio − bebida) × su comisión por cada sesión que atendió, haya pagado o no el socio: si un socio no paga, el local es quien carga con esa deuda y la sigue reclamando en la cuenta corriente.
+- **Reparto de lo que paga el socio** (como la planilla de socios): a lo **cobrado** se le saca la **bebida × los cortes del mes** (Lucio y Ale $ 3.000, Jere $ 1.500 por corte) y a lo que queda se le aplica **60 % para el barbero y 40 % para el local** (Ale cobra el 100 % de lo que queda). Un socio que **no pagó** no genera nada para el barbero ni para el local todavía (la bebida se junta igual, por los cortes); cuando paga, el reparto se calcula. Si el socio paga una parte, se reparte esa parte. Lo mismo vale para las cuentas de bebida, efectivo a rendir y ganancia de Lucio. El **Panel** sigue contando las membresías por visita (devengado) para el resultado del mes.
 - Si la asistencia tildada no coincide con los "socios" cargados en la planilla del día, aparece una nota de diferencias (no se corrige sola).
+
+## A pagar a los barberos
+
+**Más → A pagar a los barberos** (solo admin/dueño; también un resumen en el Panel y en Socios). Muestra, por barbero y por mes, **cuánto hay que pagarle**:
+
+- **Le corresponde:** el 60 % (su porcentaje) de los **cortes de la planilla** (precio − bebida) más lo de los **socios** (de lo que pagaron, menos la bebida × los cortes del mes).
+- **Ya cobró:** el efectivo que retiró de la caja, lo que se ingresó en su cuenta propia (Mercado Pago de Jere) y los **pagos registrados** desde la pantalla ("Registrar un pago": transferencia o efectivo, con anulación y motivo).
+- **Falta pagarle** = le corresponde − ya cobró, **más lo que quedó de meses anteriores**. Si cobró de más, figura como "Cobró de más: te debe".
+- Ale se paga solo (retira su parte de la cuenta donde entran los cortes), por eso no suma al total a pagar.
 
 ## Cuentas bancarias
 
@@ -110,7 +119,7 @@ Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en 
 |---|---|
 | **Efectivo a rendir** | efectivo cobrado a socios − **cortes de Ale** (la parte que Ale se queda por sus sesiones, que cobra el 100 % de lo que queda tras la bebida) − rendiciones registradas |
 | **Cuenta de bebida** | bebida descontada en cada sesión de socio: **Lucio y Ale $ 3.000, Jere $ 1.500** (según la regla de cada barbero) − compras de bebida registradas |
-| **Ganancia de Lucio** | lo que queda para el local de las sesiones de Lucio, sin la bebida ni su parte (con 60 %: en una sesión de $ 20.000 son $ 6.800) − retiros registrados |
+| **Ganancia de Lucio** | el 40 % que queda para el local de lo que pagaron los socios de Lucio, sin la bebida (con un socio que pagó $ 20.000 por un corte: $ 6.800) − retiros registrados |
 
 - Las cuentas se calculan solas de las sesiones y los cobros; lo que se carga a mano son los movimientos: **rendición**, **compra de bebida**, **retiro de ganancia** y **ajuste** (con motivo; sirve para el saldo inicial). Los movimientos se anulan con motivo, no se borran.
 - Se cuentan las sesiones de socios (no los cortes sueltos de la planilla diaria) y se devengan por mes de servicio; el efectivo, por fecha de cobro. Los cobros importados desde el Excel se registran como transferencia, así que no suman al efectivo: si alguno fue en efectivo, corregilo desde la ficha del socio.

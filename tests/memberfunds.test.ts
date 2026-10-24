@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { sessionFigures } from "../src/domain/memberfunds";
+import { paidFigures } from "../src/domain/memberfunds";
 import { addFundEntry, getMemberFunds, voidFundEntry } from "../src/services/memberfunds";
 import { createMember, registerPayment, setMemberSessions } from "../src/services/members";
 import { DomainError, type Actor } from "../src/services/common";
@@ -40,12 +40,16 @@ afterEach(async () => {
   await db.$disconnect();
 });
 
-describe("cuentas de socios: cálculo por sesión", () => {
-  it("reparte cada sesión en barbero, bebida y ganancia del local", () => {
-    const rule = (bp: number, drink: number) => ({ validFrom: "2026-09-01", commissionBp: bp, drinkDeduction: drink, drinkCost: drink });
-    expect(sessionFigures(20000, 1, rule(10000, 3000))).toEqual({ labor: 17000, drink: 3000, profit: 0 }); // Ale: 100 % de lo que queda
-    expect(sessionFigures(20000, 1, rule(6000, 3000))).toEqual({ labor: 10200, drink: 3000, profit: 6800 }); // Lucio
-    expect(sessionFigures(16500, 2, rule(6000, 1500))).toEqual({ labor: 18000, drink: 3000, profit: 12000 }); // Jere, 2 sesiones
+describe("cuentas de socios: reparto de lo cobrado", () => {
+  const rule = (bp: number, drink: number) => ({ validFrom: "2026-09-01", commissionBp: bp, drinkDeduction: drink, drinkCost: drink });
+  it("a lo cobrado se le saca la bebida × los cortes del mes y a lo que queda 60 % barbero / 40 % local", () => {
+    expect(paidFigures(20000, 1, rule(10000, 3000))).toEqual({ labor: 17000, drink: 3000, profit: 0, base: 17000 }); // Ale: 100 % de lo que queda
+    expect(paidFigures(20000, 1, rule(6000, 3000))).toEqual({ labor: 10200, drink: 3000, profit: 6800, base: 17000 }); // Lucio
+    expect(paidFigures(33000, 2, rule(6000, 1500))).toEqual({ labor: 18000, drink: 3000, profit: 12000, base: 30000 }); // Jere, 2 cortes
+  });
+  it("si el socio no pagó, no hay base: la bebida se junta igual pero el barbero y el local no reciben nada", () => {
+    expect(paidFigures(0, 4, rule(6000, 3000))).toEqual({ labor: 0, drink: 12000, profit: 0, base: 0 });
+    expect(paidFigures(5000, 4, rule(6000, 3000))).toEqual({ labor: 0, drink: 12000, profit: 0, base: 0 }); // pagó menos que la bebida
   });
 });
 
@@ -54,8 +58,11 @@ describe("efectivo a rendir, cuenta de bebida y ganancia de Lucio", () => {
     await setMemberSessions(db, { actor: ale, memberId: mJere, month: "2026-10", sessions: 4 });
     await setMemberSessions(db, { actor: ale, memberId: mAle, month: "2026-10", sessions: 2 });
     await setMemberSessions(db, { actor: ale, memberId: mLucio, month: "2026-10", sessions: 3 });
-    await registerPayment(db, { actor: ale, memberId: mJere, date: "2026-10-05", amount: 50000, method: "EFECTIVO", now: NOW });
-    await registerPayment(db, { actor: ale, memberId: mLucio, date: "2026-10-06", amount: 30000, method: "BANCO", now: NOW });
+    // Los tres socios pagaron todo el mes (sesiones × precio): el reparto sale de lo cobrado.
+    await registerPayment(db, { actor: ale, memberId: mJere, date: "2026-10-05", amount: 50000, method: "EFECTIVO", period: "2026-10", now: NOW });
+    await registerPayment(db, { actor: ale, memberId: mJere, date: "2026-10-05", amount: 16000, method: "BANCO", period: "2026-10", now: NOW }); // 4 × 16.500
+    await registerPayment(db, { actor: ale, memberId: mAle, date: "2026-10-05", amount: 40000, method: "BANCO", period: "2026-10", now: NOW }); // 2 × 20.000
+    await registerPayment(db, { actor: ale, memberId: mLucio, date: "2026-10-06", amount: 60000, method: "BANCO", period: "2026-10", now: NOW }); // 3 × 20.000
   });
 
   it("efectivo a rendir = efectivo cobrado − cortes de Ale (lo que él se queda); la transferencia no cuenta", async () => {
@@ -68,11 +75,19 @@ describe("efectivo a rendir, cuenta de bebida y ganancia de Lucio", () => {
     expect(f.balances.bebida).toBe(4 * 1500 + 2 * 3000 + 3 * 3000);
     expect(f.drinkByBarber.map((d) => [d.name, d.sessions, d.amount])).toEqual([["Lucio", 3, 9000], ["Ale", 2, 6000], ["Jere", 4, 6000]]);
   });
+  it("un socio que no pagó genera bebida (por los cortes) pero ninguna ganancia ni pago al barbero", async () => {
+    const otro = (await createMember(db, { actor: ale, name: "Moroso", serviceType: "CORTE", userId: ids.lucio, price: 20000, startDate: "2026-09-01", now: NOW })).id;
+    await setMemberSessions(db, { actor: ale, memberId: otro, month: "2026-10", sessions: 5 });
+    const f = await getMemberFunds(db, "2026-10");
+    expect(f.balances.bebida).toBe(21000 + 5 * 3000); // la bebida se junta por los cortes
+    expect(f.balances.ganancia).toBe(3 * 6800); // la ganancia de Lucio sigue igual: el moroso no suma
+  });
   it("la ganancia de Lucio es lo que queda para el local de sus sesiones, sin bebida ni su parte", async () => {
     expect((await getMemberFunds(db, "2026-10")).balances.ganancia).toBe(3 * 6800);
   });
   it("se acumula de un mes al siguiente", async () => {
     await setMemberSessions(db, { actor: ale, memberId: mLucio, month: "2026-09", sessions: 4 });
+    await registerPayment(db, { actor: ale, memberId: mLucio, date: "2026-09-10", amount: 80000, method: "BANCO", period: "2026-09", now: NOW });
     const oct = await getMemberFunds(db, "2026-10");
     expect(oct.balances.ganancia).toBe(7 * 6800);
     expect(oct.current.profit).toBe(3 * 6800); // el mes elegido

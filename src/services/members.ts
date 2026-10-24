@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { paidFigures } from "../domain/memberfunds";
 import { buildStatement, carriedInto, DEFAULT_MEMBER_PRICES, daysSince, defaultPeriod, dueDate, memberContribution, MEMBER_PLANS, oldestUnpaidMonth, PAY_TIMINGS, type MemberPlan, type PayTiming, type MonthEntry, type MonthStatus, type StatementRow } from "../domain/members";
 import { todayBA } from "../domain/money";
 import { pickEffective } from "../domain/rules";
@@ -293,7 +294,11 @@ export interface MemberRow {
   oldestUnpaid: string | null;
   lastVisit: string | null;
   daysSinceVisit: number | null;
+  /** Bebida × cortes del mes (va a la cuenta de bebida). */
+  drink: number;
+  /** Lo que le corresponde al barbero: su % de lo cobrado menos la bebida. */
   barberShare: number;
+  /** Lo que queda para el local: el resto de lo cobrado menos la bebida. */
   localShare: number;
 }
 
@@ -322,13 +327,18 @@ interface MemberData {
 }
 
 /** Una línea a liquidar: `qty` sesiones a `price`, atendidas por `who` en `date` (para elegir la regla vigente del barbero). */
-interface Line { who: string; date: string; price: number; qty: number }
+interface Line { who: string; date: string; price: number; qty: number; /** Lo cobrado a este socio para el mes, repartido entre las sesiones de la línea. */ paid: number }
 
 /** Líneas de un mes: cada asistencia tildada o, si las sesiones están cargadas a mano, todas juntas con el barbero asignado. */
 function linesFor(m: MemberData, month: string): Line[] {
   const manual = m.overrides.get(month);
-  if (manual !== undefined) return manual > 0 ? [{ who: m.userId ?? "", date: `${month}-28`, price: priceFor(m.prices, `${month}-01`), qty: manual }] : [];
-  return m.attendance.filter((a) => a.date.startsWith(month)).map((a) => ({ who: a.userId ?? m.userId ?? "", date: a.date, price: priceFor(m.prices, a.date), qty: 1 }));
+  const raw: Omit<Line, "paid">[] =
+    manual !== undefined
+      ? manual > 0 ? [{ who: m.userId ?? "", date: `${month}-28`, price: priceFor(m.prices, `${month}-01`), qty: manual }] : []
+      : m.attendance.filter((a) => a.date.startsWith(month)).map((a) => ({ who: a.userId ?? m.userId ?? "", date: a.date, price: priceFor(m.prices, a.date), qty: 1 }));
+  const total = raw.reduce((s, l) => s + l.qty, 0);
+  const paid = m.ledger.filter((l) => l.kind === "PAGO" && l.period === month).reduce((s, l) => s + l.credit, 0);
+  return raw.map((l) => ({ ...l, paid: total > 0 ? Math.round((paid * l.qty) / total) : 0 }));
 }
 
 /** Cuenta corriente de un socio mes a mes: sesiones, cargos, ajustes y cobros (por mes de servicio). */
@@ -393,17 +403,20 @@ export async function getMembersMonth(db: Db, month: string, now: Date = new Dat
     const statement = buildStatement(entriesOf(d, { today, debtDay }));
     const cur = statement.find((r) => r.month === month);
     const lines = linesFor(d, month);
+    // Reparto de lo cobrado: bebida × cortes del mes y, a lo que queda, 60 % barbero / 40 % local (como la planilla de socios).
     let barberShare = 0;
     let localShare = 0;
+    let drink = 0;
     for (const l of lines) {
       const rule = pickEffective(rulesBy.get(l.who) ?? [], l.date);
       if (!rule) {
-        localShare += l.price * l.qty;
+        localShare += l.paid;
         continue;
       }
-      const c = memberContribution(l.price, rule);
-      barberShare += c.barber * l.qty;
-      localShare += c.local * l.qty;
+      const f = paidFigures(l.paid, l.qty, rule);
+      barberShare += f.labor;
+      localShare += f.profit;
+      drink += f.drink;
     }
     const lastVisit = d.attendance.reduce<string | null>((best, a) => (!best || a.date > best ? a.date : best), null);
     const payDates = d.ledger.filter((l) => l.kind === "PAGO" && l.period === month).map((l) => l.date).sort();
@@ -424,7 +437,7 @@ export async function getMembersMonth(db: Db, month: string, now: Date = new Dat
       oldestUnpaid: oldestUnpaidMonth(statement),
       lastVisit,
       daysSinceVisit: lastVisit ? daysSince(lastVisit, today) : null,
-      barberShare, localShare,
+      drink, barberShare, localShare,
     };
   });
   const active = rows.filter((r) => r.active || r.visits > 0 || r.balance !== 0);
@@ -468,9 +481,12 @@ async function monthLines(db: Db, month: string) {
   return out;
 }
 
-/** Lo que le corresponde cobrar a un barbero en el mes por las sesiones de socios que atendió. */
+/**
+ * Lo que le corresponde cobrar a un barbero en el mes por los socios que atendió, sobre lo que esos socios pagaron:
+ * (cobrado − bebida × cortes del mes) × su porcentaje. Un socio que no pagó no genera nada todavía.
+ */
 export async function membershipLaborFor(db: Db, userId: string, period: string): Promise<number> {
-  return (await monthLines(db, period)).filter((l) => l.who === userId && l.rule).reduce((t, l) => t + memberContribution(l.price, l.rule!).barber * l.qty, 0);
+  return (await monthLines(db, period)).filter((l) => l.who === userId && l.rule).reduce((t, l) => t + paidFigures(l.paid, l.qty, l.rule!).labor, 0);
 }
 
 /** Totales del mes para el panel: ingreso devengado (sesiones × precio), mano de obra por barbero y costo de la bebida entregada. */

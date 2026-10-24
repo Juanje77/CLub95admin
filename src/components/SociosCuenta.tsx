@@ -109,6 +109,13 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
   const shown = data.members.filter((m) => (!q.trim() || norm(m.name).includes(norm(q.trim()))) && (filter === "todos" || (filter === "cobrar" && toCollect.includes(m)) || (filter === "deben" && m.balance > 0)));
   const shownGroups = [...new Set(shown.map((m) => m.barberName))];
   const payingMember = data.members.find((m) => m.id === paying) ?? null;
+  // Lo que les corresponde a los barberos por los socios este mes (de lo cobrado: bebida × cortes y 60 % del resto).
+  const byBarber = Object.entries(
+    data.members.reduce<Record<string, { share: number; sessions: number }>>((acc, m) => {
+      const cur = acc[m.barberName] ?? { share: 0, sessions: 0 };
+      return { ...acc, [m.barberName]: { share: cur.share + m.barberShare, sessions: cur.sessions + m.visits } };
+    }, {}),
+  ).sort((a, b) => b[1].share - a[1].share);
 
   return (
     <>
@@ -124,6 +131,18 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
         <div className="card"><div className="muted">Cobrado del mes</div><div className="num big2">{formatARS(t.paid)}</div></div>
         <div className="card"><div className="muted">Deuda total</div><div className={`num big2 ${t.debt > 0 ? "errc" : "okc"}`}>{formatARS(t.debt)}</div></div>
       </div>
+
+      <section className="card" aria-label="A pagar a los barberos" style={{ marginBottom: 8 }}>
+        <div className="row spread">
+          <h2 style={{ margin: 0 }}>A pagar a los barberos</h2>
+          <Link className="btn" href={`/barberos?mes=${data.month}`}>Ver todo lo que les debo →</Link>
+        </div>
+        <p className="muted" style={{ margin: "4px 0" }}>Por los socios de este mes: de lo cobrado se saca la bebida × los cortes y a lo que queda, 60 % para el barbero.</p>
+        <ul className="list">
+          {byBarber.map(([name, v]) => <li key={name}><span>{name} <span className="muted">· {v.sessions} cortes</span></span><b className="num">{formatARS(v.share)}</b></li>)}
+          {byBarber.length === 0 && <li className="muted">Todavía no hay socios cargados.</li>}
+        </ul>
+      </section>
 
       <div className="toolbar">
         <input type="search" className="search" placeholder="Buscar socio…" aria-label="Buscar socio" value={q} onChange={(e) => setQ(e.target.value)} />

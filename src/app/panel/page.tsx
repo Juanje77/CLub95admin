@@ -7,6 +7,7 @@ import { formatARS, formatDate, monthLabel, shiftMonth, todayBA } from "../../do
 import { requireAdmin } from "../../lib/auth";
 import { db } from "../../lib/db";
 import { getBankAccounts } from "../../services/bankaccounts";
+import { getBarberPayables } from "../../services/barberpay";
 import { getBoxBalance } from "../../services/closing";
 import { CATEGORY_LABEL, listExpenses, recurringStatus } from "../../services/expenses";
 import { getMemberFunds } from "../../services/memberfunds";
@@ -34,7 +35,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const today = todayBA();
   const month = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : today.slice(0, 7);
-  const [{ report: r, series, weekdays }, funds, banks, socios, exp, fixed, box] = await Promise.all([
+  const [{ report: r, series, weekdays }, funds, banks, socios, exp, fixed, box, payables] = await Promise.all([
     getPanel(db, month),
     getMemberFunds(db, month),
     getBankAccounts(db, month),
@@ -42,6 +43,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     listExpenses(db, { month }),
     recurringStatus(db, month),
     getBoxBalance(db),
+    getBarberPayables(db, month),
   ]);
   const prev = series[series.length - 2];
   const cur = series[series.length - 1]!;
@@ -57,6 +59,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   if (r.gaps.length > 0) attention.push({ tone: "err", text: `${r.gaps.length} día${r.gaps.length === 1 ? "" : "s"} con descuadre de caja`, value: signed(r.gapsTotal), href: "#caja" });
   if (dueFixed.length > 0) attention.push({ tone: "warn", text: `Gastos fijos sin cargar: ${dueFixed.map((f) => f.concept).join(", ")}`, href: `/gastos?mes=${month}` });
   if (debtors.length > 0) attention.push({ tone: "warn", text: `${debtors.length} socio${debtors.length === 1 ? "" : "s"} con deuda`, value: formatARS(socios.totals.debt), href: "#socios" });
+  if (payables.totalToPay > 0) attention.push({ tone: "warn", text: "A pagar a los barberos", value: formatARS(payables.totalToPay), href: `/barberos?mes=${month}` });
   if (funds.balances.efectivo > 0) attention.push({ tone: "warn", text: "Efectivo de socios a rendir", value: formatARS(funds.balances.efectivo), href: "#caja" });
   if (r.result < 0) attention.push({ tone: "err", text: "El mes viene en pérdida", value: signed(r.result), href: "#resumen" });
   if (attention.length === 0) attention.push({ tone: "ok", text: "Todo en orden: sin descuadres, gastos fijos al día y sin deudas de socios", href: "#resumen" });
@@ -140,6 +143,19 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           </tbody>
         </table>
         <p className="muted" style={{ margin: "6px 0" }}>“Ingresó” es el dinero ingresado de cada día en esa cuenta; la diferencia con lo que debería entrar es lo que se pagó en efectivo o falta cargar.</p>
+      </div>
+
+      <h2>A pagar a los barberos <Link className="sec-link noprint" href={`/barberos?mes=${month}`}>ver detalle y registrar pagos →</Link></h2>
+      <div className="card" style={{ padding: "4px 14px" }}>
+        <ul className="list">
+          {payables.barbers.map((b) => (
+            <li key={b.userId}>
+              <span>{b.name} <span className="muted">· le corresponde {formatARS(b.entitled)}{b.selfPaid ? " · retira de su cuenta" : ""}</span></span>
+              {b.selfPaid ? <span className="muted">—</span> : <b className={`num ${b.toPay > 0 ? "errc" : ""}`}>{b.toPay < 0 ? `−${formatARS(-b.toPay)}` : formatARS(b.toPay)}</b>}
+            </li>
+          ))}
+          <li><b>Total a pagar</b><b className="num">{formatARS(payables.totalToPay)}</b></li>
+        </ul>
       </div>
 
       <h2>Efectivo <Link className="sec-link noprint" href="/efectivo">ver detalle →</Link></h2>

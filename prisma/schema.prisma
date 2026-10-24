@@ -28,13 +28,14 @@ model User {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  rules       BarberRule[]
-  sales       Sale[]
-  members     Member[]
-  accounts    PaymentAccount[]
-  settlements BarberSettlement[]
-  boxEntries  CashBoxEntry[]
-  attendances Attendance[]
+  rules          BarberRule[]
+  sales          Sale[]
+  members        Member[]
+  accounts       PaymentAccount[]
+  barberPayments BarberPayment[]
+  settlements    BarberSettlement[]
+  boxEntries     CashBoxEntry[]
+  attendances    Attendance[]
 }
 
 // Comisión y descuento de bebida por barbero, con vigencia. Nunca fijos en el código.
@@ -187,6 +188,23 @@ model CashBoxEntry {
 }
 
 // Compensación de fin de mes por barbero: lo que le corresponde cobrar (servicios + membresías) contra lo que ya cobró.
+// Pagos del local a un barbero (por ejemplo, el 60 % de Lucio desde la cuenta de Ale): bajan lo que falta pagarle.
+model BarberPayment {
+  id          String    @id @default(cuid())
+  userId      String
+  date        String
+  amount      Int
+  method      String // BANCO | EFECTIVO
+  note        String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, date])
+}
+
 model BarberSettlement {
   id              String    @id @default(cuid())
   userId          String
