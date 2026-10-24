@@ -5,11 +5,12 @@ import { formatARS, formatDate, todayBA } from "../../domain/money";
 import { requireUser } from "../../lib/auth";
 import { db } from "../../lib/db";
 import { isAdmin } from "../../services/common";
+import { cashExpenseEntries } from "../../services/expenses";
 import { getDayCoverage } from "../../services/figures";
 
 export const dynamic = "force-dynamic";
 
-const KIND: Record<string, string> = { CIERRE: "Cierre del día", RETIRO_BARBERO: "Retiro de barbero", RENDICION: "Rendición al dueño", AJUSTE: "Ajuste" };
+const KIND: Record<string, string> = { CIERRE: "Cierre del día", RETIRO_BARBERO: "Retiro de barbero", RENDICION: "Rendición al dueño", AJUSTE: "Ajuste", GASTO: "Gasto pagado en efectivo" };
 
 export default async function EfectivoPage() {
   const user = await requireUser();
@@ -20,7 +21,8 @@ export default async function EfectivoPage() {
     db.user.findMany({ where: { isBarber: true, active: true, deletedAt: null }, orderBy: { name: "asc" } }),
     getDayCoverage(db, today),
   ]);
-  const { rows, balance } = boxLedger(entries.map((e) => ({ date: e.date, kind: e.kind as BoxKind, amount: e.amount, expectedAmount: e.expectedAmount })));
+  const spent = await cashExpenseEntries(db);
+  const { rows, balance } = boxLedger([...entries.map((e) => ({ date: e.date, kind: e.kind as BoxKind, amount: e.amount, expectedAmount: e.expectedAmount })), ...spent]);
   const last = lastRendicionDate(entries.map((e) => ({ date: e.date, kind: e.kind as BoxKind, amount: e.amount })));
   const cov = coverage.map((c) => ({ userId: c.barberId, name: c.name, labor: c.labor, bankCovered: c.coveredByBank, allowed: c.cashAllowed, withdrawn: c.cashWithdrawn, remaining: c.remaining }));
   const covAll = barbers.map((b) => cov.find((c) => c.userId === b.id) ?? { userId: b.id, name: b.name, labor: 0, bankCovered: 0, allowed: 0, withdrawn: 0, remaining: 0 });

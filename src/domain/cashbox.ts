@@ -2,7 +2,7 @@
  * Fila de efectivo acumulado. Cada cierre suma el efectivo del día; los retiros de barberos y las rendiciones al dueño restan.
  * El saldo es la suma de los montos con signo.
  */
-export type BoxKind = "CIERRE" | "RETIRO_BARBERO" | "RENDICION" | "AJUSTE";
+export type BoxKind = "CIERRE" | "RETIRO_BARBERO" | "RENDICION" | "AJUSTE" | "GASTO";
 
 export interface BoxEntry {
   date: string; // YYYY-MM-DD
@@ -17,7 +17,7 @@ export interface LedgerRow extends BoxEntry {
   balance: number;
 }
 
-const KIND_ORDER: Record<BoxKind, number> = { CIERRE: 0, AJUSTE: 1, RETIRO_BARBERO: 2, RENDICION: 3 };
+const KIND_ORDER: Record<BoxKind, number> = { CIERRE: 0, AJUSTE: 1, RETIRO_BARBERO: 2, GASTO: 2, RENDICION: 3 };
 
 export function boxLedger(entries: BoxEntry[]): { rows: LedgerRow[]; balance: number } {
   // Dentro de un mismo día: primero lo que entra con el cierre y al final la rendición.

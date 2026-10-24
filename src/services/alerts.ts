@@ -3,7 +3,7 @@ import { computeCloseAlerts, DEFAULT_ALERT_SETTINGS, type AlertSettings, type Cl
 import type { BoxKind } from "../domain/cashbox";
 import { todayBA } from "../domain/money";
 import { getDayCoverage } from "./figures";
-import { recurringStatus } from "./expenses";
+import { cashExpenseEntries, recurringStatus } from "./expenses";
 import { memberAlertData } from "./members";
 
 export async function loadAlertSettings(db: PrismaClient): Promise<AlertSettings> {
@@ -69,7 +69,10 @@ export async function syncAlerts(db: PrismaClient, opts: { now?: Date; windowDay
     });
   }
   const closedDays = (await db.closedDay.findMany({ where: { deletedAt: null, date: { gte: from, lte: today } } })).map((c) => c.date);
-  const box = (await db.cashBoxEntry.findMany({ where: { deletedAt: null } })).map((e) => ({ id: e.id, date: e.date, kind: e.kind as BoxKind, amount: e.amount, expectedAmount: e.expectedAmount }));
+  const box = [
+    ...(await db.cashBoxEntry.findMany({ where: { deletedAt: null } })).map((e) => ({ id: e.id, date: e.date, kind: e.kind as BoxKind, amount: e.amount, expectedAmount: e.expectedAmount })),
+    ...(await cashExpenseEntries(db)),
+  ];
 
   // Compensaciones: barberos con servicios en los últimos 2 meses cerrados.
   const settlements: SettlementState[] = [];

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { addExpense } from "../src/services/expenses";
+import { getBoxBalance } from "../src/services/closing";
 import { getBankAccounts } from "../src/services/bankaccounts";
 import { setDeclared, setProductCount, setServiceCount } from "../src/services/grid";
 import { createMember, registerPayment } from "../src/services/members";
@@ -69,6 +70,10 @@ describe("cuentas bancarias: por dónde entra la plata", () => {
     const j = r.accounts.find((a) => a.key === "BRUBANK_JUAN")!;
     expect(j.payouts).toContainEqual({ label: "Gastos pagados desde esta cuenta", amount: 4000 });
     expect(r.cashExpenses).toBe(1500);
+    const before = await getBoxBalance(db);
+    const g = await db.expense.findFirstOrThrow({ where: { accountKey: "EFECTIVO" } });
+    await db.expense.update({ where: { id: g.id }, data: { deletedAt: new Date() } });
+    expect((await getBoxBalance(db)) - before).toBe(1500); // al borrar el gasto, vuelve a la caja
   });
 
   it("lo ingresado de cada día se compara con lo esperado: la diferencia es lo que se pagó en efectivo", async () => {

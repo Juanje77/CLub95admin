@@ -260,3 +260,9 @@ export async function deleteExtraIncome(db: PrismaClient, p: { actor: Actor; id:
 export async function listExtraIncome(db: Db, month: string) {
   return db.extraIncome.findMany({ where: { deletedAt: null, date: monthRange(month) }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] });
 }
+
+/** Gastos pagados en efectivo: salen de la caja de efectivo. Se calculan desde los gastos, así editar o borrar uno corrige el saldo solo. */
+export async function cashExpenseEntries(db: Db): Promise<{ date: string; kind: "GASTO"; amount: number; note: string }[]> {
+  const rows = await db.expense.findMany({ where: { deletedAt: null, accountKey: "EFECTIVO" }, include: { concept: true } });
+  return rows.map((e) => ({ date: e.date, kind: "GASTO" as const, amount: -e.amount, note: e.concept.name }));
+}

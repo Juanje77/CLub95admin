@@ -5,6 +5,7 @@ import { todayBA } from "../domain/money";
 import { audit, DomainError, isAdmin, type Actor, type Db } from "./common";
 import { checkWithdrawal } from "../domain/coverage";
 import { getDayCoverage, getDayFigures } from "./figures";
+import { cashExpenseEntries } from "./expenses";
 
 export interface CloseDayParams {
   date: string;
@@ -111,7 +112,8 @@ export async function markClosedDay(db: PrismaClient, p: { date: string; actor: 
 
 export async function getBoxBalance(db: Db): Promise<number> {
   const entries = await db.cashBoxEntry.findMany({ where: { deletedAt: null } });
-  return boxBalance(entries.map((e) => ({ date: e.date, kind: e.kind as BoxKind, amount: e.amount })));
+  const spent = await cashExpenseEntries(db);
+  return boxBalance([...entries.map((e) => ({ date: e.date, kind: e.kind as BoxKind, amount: e.amount })), ...spent]);
 }
 
 /**
