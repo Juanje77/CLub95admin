@@ -57,14 +57,25 @@ export interface SocioRow {
   payDate: string | null;
   /** Mes de servicio al que corresponden las sesiones y el cobro. */
   serviceMonth: string;
-  /** Cuándo suele pagar, deducido de la hoja: cobros de los últimos días del mes = fin de mes; el resto, principio de mes. */
-  payTiming: "INICIO" | "FIN";
+  /** Modalidad de pago deducida de la hoja (ver `timingFrom`). */
+  payTiming: "ADELANTADO" | "INICIO" | "FIN";
 }
 export interface ParsedSocios {
   sheet: string;
   month: string;
   rows: SocioRow[];
   skipped: { row: number; name: string; reason: string }[];
+}
+
+/**
+ * Modalidad de pago deducida de la hoja: "mes siguiente" = paga el mes por adelantado; "mes anterior" = devengado, paga a principio del mes
+ * los cortes del mes que terminó; sin indicación, un cobro de los últimos días del mes es devengado a fin de mes y uno de principio de mes es adelantado.
+ */
+export function timingFrom(offset: number, payDay: number | null): "ADELANTADO" | "INICIO" | "FIN" {
+  if (offset > 0) return "ADELANTADO";
+  if (offset < 0) return "INICIO";
+  if (payDay === null) return "INICIO";
+  return payDay >= 20 ? "FIN" : "ADELANTADO";
 }
 
 export function parseSociosSheet(ws: ExcelJS.Worksheet, month: string): ParsedSocios {
@@ -105,7 +116,7 @@ export function parseSociosSheet(ws: ExcelJS.Worksheet, month: string): ParsedSo
       paid,
       payDate: dateRaw instanceof Date ? isoDate(dateRaw) : typeof dateRaw === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : null,
       serviceMonth: shiftMonth(month, offset),
-      payTiming: offset === 0 && dateRaw instanceof Date && Number(isoDate(dateRaw).slice(8, 10)) >= 20 ? "FIN" : "INICIO",
+      payTiming: timingFrom(offset, dateRaw instanceof Date ? Number(isoDate(dateRaw).slice(8, 10)) : null),
     });
   }
   return out;

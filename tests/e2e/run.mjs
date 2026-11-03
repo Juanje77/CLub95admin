@@ -1,5 +1,5 @@
 // Prueba de punta a punta en un navegador móvil: la planilla del mes (días en columnas, todo en cantidades).
-// Requiere el servidor corriendo (BASE_URL) y una base con `npm run seed`. Hoy debe caer en octubre de 2026 (reloj del servidor).
+// Requiere el servidor corriendo (BASE_URL) y una base con `npm run seed`. Usa el mes en curso (reloj del servidor).
 // Uso: BASE_URL=http://localhost:3100 CHROME=/ruta/a/chrome SHOTS=/tmp/shots node tests/e2e/run.mjs
 import { chromium } from "playwright-core";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -9,6 +9,11 @@ import { join } from "node:path";
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const SHOTS = process.env.SHOTS ?? "/tmp/club95-shots";
 const TODAY = process.env.TODAY ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
+const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const [TY, TM] = TODAY.split("-").map(Number);
+const MES = `${MONTHS[TM - 1]} ${TY}`; // el mes en curso (la prueba funciona cualquier mes)
+const PREV = TM === 1 ? `diciembre ${TY - 1}` : `${MONTHS[TM - 2]} ${TY}`;
+const DIM = new Date(Date.UTC(TY, TM, 0)).getUTCDate();
 const YESTERDAY = new Date(Date.parse(TODAY + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
 mkdirSync(SHOTS, { recursive: true });
 
@@ -45,8 +50,8 @@ check(page.url().endsWith("/login"), "sin sesión redirige al login");
 // 2. Barbero entra a la planilla del mes
 await login("lucio", "4444");
 await page.waitForURL(BASE + "/");
-await page.getByRole("heading", { name: /octubre 2026/i }).waitFor();
-check((await page.locator("table.grid thead th.day").count()) === 31, "una columna por día del mes (31)");
+await page.getByRole("heading", { name: new RegExp(`${MES}`, "i") }).waitFor();
+check((await page.locator("table.grid thead th.day").count()) === DIM, `una columna por día del mes (${DIM})`);
 await shot("planilla-vacia");
 
 // 3. Solo cantidades: servicios, socios, bebida y cera
@@ -110,7 +115,7 @@ const adminEfectivo = async () => {
 await adminEfectivo();
 check(/Efectivo acumulado en la caja\s*\$ 12\.000/.test(await page.locator("body").innerText()), "el efectivo del cierre quedó en la fila acumulada ($ 12.000)");
 await page.getByRole("link", { name: "Planilla" }).click();
-await page.getByRole("heading", { name: /octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`${MES}`, "i") }).waitFor();
 await type("Jere|CORTE", 4, YESTERDAY);
 await calcIs("c-ing", "80.000", YESTERDAY);
 await calcIs("c-mo", "44.400", YESTERDAY); // 4 × (20.000 − 1.500) × 60%
@@ -127,7 +132,7 @@ check(/Efectivo acumulado en la caja\s*\$ 0/.test(await page.locator("body").inn
 // 8. Navegación entre meses y alertas
 await page.getByRole("link", { name: "Planilla" }).click();
 await page.getByRole("link", { name: "Mes anterior" }).click();
-await page.getByRole("heading", { name: /septiembre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(PREV, "i") }).waitFor();
 check(true, "se puede navegar al mes anterior");
 await page.getByRole("link", { name: /Alertas/ }).click();
 await page.getByRole("heading", { name: "Alertas" }).waitFor();
@@ -137,7 +142,7 @@ page.on("dialog", (d) => d.accept());
 
 // 9a. Socios (admin): alta, asistencia, cobro y ajuste
 await page.getByRole("link", { name: "Socios" }).click();
-await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Socios · ${MES}`, "i") }).waitFor();
 await page.locator("summary", { hasText: "Agregar un socio" }).click();
 const memberForm = page.locator("details", { hasText: "Agregar un socio" }).locator("form");
 await memberForm.getByLabel("Nombre", { exact: true }).fill("Matías Arrue");
@@ -197,7 +202,7 @@ await shot("socios");
 const jpegPath = join(tmpdir(), "comprobante.jpg");
 writeFileSync(jpegPath, Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==", "base64"));
 await page.getByRole("link", { name: "Gastos" }).click();
-await page.getByRole("heading", { name: /Gastos · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Gastos · ${MES}`, "i") }).waitFor();
 await page.locator("summary", { hasText: "Gastos fijos recurrentes" }).click();
 const recForm = page.locator("details", { hasText: "Gastos fijos recurrentes" }).locator("form");
 await recForm.locator("select").selectOption({ label: "ALQUILER" });
@@ -247,7 +252,7 @@ check(true, "los otros ingresos (publicidad) se cargan por mes");
 
 // 9b. Panel del dueño: cifras del mes, Excel y permisos
 await page.getByRole("link", { name: "Panel", exact: true }).click();
-await page.getByRole("heading", { name: /Panel · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Panel · ${MES}`, "i") }).waitFor();
 const stmt = (label) => page.locator("table.stmt tr", { hasText: label }).last().locator("td").last();
 check((await stmt("Total ingresos").innerText()).trim() === "$ 341.700", "panel: total ingresos = servicios + socios + bebida + cera + publicidad");
 check((await stmt("Total mano de obra").innerText()).trim() === "$ 104.400", "panel: mano de obra de servicios y de socios");
@@ -282,7 +287,7 @@ check(!/scrypt|pinHash/i.test(await page.locator("body").innerText()), "la audit
 
 // 9c. Socios: plan Gold con el precio del plan y sesiones cargadas a mano
 await page.getByRole("link", { name: "Socios" }).click();
-await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Socios · ${MES}`, "i") }).waitFor();
 await page.locator("summary", { hasText: "Agregar un socio" }).click();
 const goldForm = page.locator("details", { hasText: "Agregar un socio" }).locator("form");
 await goldForm.getByLabel("Nombre", { exact: true }).fill("Tomás Gold");
@@ -301,7 +306,7 @@ await shot("socios-cuenta");
 // 9d. Cargar socios desde una planilla de Excel (vista previa, carga y repetición sin duplicar)
 const { default: ExcelJS } = await import("exceljs");
 const impWb = new ExcelJS.Workbook();
-const impWs = impWb.addWorksheet("OCTUBRE 2026");
+const impWs = impWb.addWorksheet(MES.toUpperCase());
 impWs.addRow(["CLUB 95"]); impWs.addRow([]); impWs.addRow([]);
 impWs.addRow(["#", "NOMBRE", "PLAN", "TIPO", "BARBERO", "SESIONES", "PRECIO/SES", "TOTAL MES $", "COBRADO $", "FECHA PAGO", "MES QUE CORRESPONDE"]);
 impWs.addRow([1, "Importado Uno", "BLACK", "CORTE", "JERE", 4, 16250, 65000, null, null, "MES ACTUAL"]);
@@ -323,7 +328,7 @@ await page.getByRole("button", { name: /Cargar 2 socios/ }).click();
 await page.getByText(/Listo: 2 socios nuevos/).first().waitFor();
 check(true, "se cargan los socios nuevos con sus sesiones");
 await page.getByRole("link", { name: "Ver los socios" }).click();
-await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Socios · ${MES}`, "i") }).waitFor();
 const impRow = page.locator("table.cuenta tr", { hasText: "Importado Dos" });
 await impRow.waitFor();
 check(/115\.000/.test(await impRow.innerText()), "Gold corte y barba: 5 sesiones × $ 23.000 = $ 115.000 en la planilla mensual");
@@ -375,7 +380,7 @@ await shot("socios-cuentas");
 // 9f. Cuentas bancarias: por dónde entra la plata (Juan, Jere y Ale)
 await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /Cuentas bancarias/ }).click();
-await page.getByRole("heading", { name: /Cuentas · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Cuentas · ${MES}`, "i") }).waitFor();
 for (const who of ["Juan", "Jere", "Ale"]) await page.getByRole("region", { name: `Cuenta de ${who}` }).waitFor();
 check(/Socios que pagaron por transferencia/.test(await page.getByRole("region", { name: "Cuenta de Juan" }).innerText()), "la cuenta de Juan junta los socios que pagan por transferencia, las bebidas y las ceras");
 check(/Cortes de Jere/.test(await page.getByRole("region", { name: "Cuenta de Jere" }).innerText()), "la cuenta de Jere junta sus cortes");
@@ -386,7 +391,7 @@ await shot("cuentas-bancarias");
 // 9g. A pagar a los barberos: lo que les corresponde, lo ya cobrado y el registro de pagos
 await page.getByRole("link", { name: "Más", exact: true }).click();
 await page.getByRole("link", { name: /A pagar a los barberos/ }).click();
-await page.getByRole("heading", { name: /A pagar · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`A pagar · ${MES}`, "i") }).waitFor();
 await page.getByRole("region", { name: "Total a pagar a los barberos" }).waitFor();
 const lucioPay = page.getByRole("region", { name: "Barbero Lucio" });
 check(/Cortes de la planilla/.test(await lucioPay.innerText()) && /Falta pagarle/.test(await lucioPay.innerText()), "Lucio: se ve lo que le corresponde y lo que falta pagarle");
@@ -409,7 +414,7 @@ const noHScroll = () => page.evaluate(() => document.documentElement.scrollWidth
 check(await noHScroll(), "A pagar a los barberos no desborda en celular");
 await page.setViewportSize({ width: 1280, height: 800 });
 await page.reload();
-await page.getByRole("heading", { name: /A pagar · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`A pagar · ${MES}`, "i") }).waitFor();
 check(await noHScroll(), "A pagar a los barberos no desborda en computadora (las tarjetas respetan el ancho)");
 const cards = await page.locator("section.card[aria-label^='Barbero']").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
 check(cards.every((r) => r <= 1281), "las tarjetas de barberos caben en la pantalla");
@@ -421,7 +426,7 @@ await page.getByRole("region", { name: "Cuenta mensual de socios" }).waitFor();
 await page.getByLabel("Buscar socio").fill("importado");
 await page.getByRole("button", { name: "Seleccionar para eliminar" }).click();
 await page.getByRole("button", { name: /^Elegir los \d+ que se ven/ }).click();
-const selbar = page.getByRole("region", { name: "Eliminar socios elegidos" });
+const selbar = page.getByRole("region", { name: "Socios elegidos" });
 await selbar.waitFor();
 check(/2 socios elegidos/.test(await selbar.innerText()), "se eligen los 2 socios importados para eliminar");
 check(await selbar.getByRole("button", { name: "Eliminar elegidos" }).isDisabled(), "no deja eliminar sin motivo");
@@ -477,7 +482,7 @@ check((await page.request.get(BASE + "/api/comprobante/x")).status() === 401, "u
 
 // 11. Socios vistos por un barbero: solo hoy, sin importes
 await page.getByRole("link", { name: "Socios" }).click();
-await page.getByRole("heading", { name: /Socios · octubre 2026/i }).waitFor();
+await page.getByRole("heading", { name: new RegExp(`Socios · ${MES}`, "i") }).waitFor();
 check((await att(YESTERDAY).isDisabled()) && !(await att(TODAY).isDisabled()), "el barbero solo puede marcar la asistencia de hoy");
 check(!(await page.locator("table.grid").innerText()).includes("A cobrar"), "el barbero no ve los importes de los socios");
 await att(TODAY).click();

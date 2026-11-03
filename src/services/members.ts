@@ -69,7 +69,7 @@ export async function createMember(
     if (!b || !b.isBarber) throw new DomainError("BARBERO_INVALIDO", "El barbero asignado no es válido.");
   }
   const payTiming = p.payTiming ?? "INICIO";
-  if (!(PAY_TIMINGS as readonly string[]).includes(payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá si paga a principio o a fin de mes.");
+  if (!(PAY_TIMINGS as readonly string[]).includes(payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá la modalidad de pago: por adelantado o devengado.");
   const plan = p.plan?.trim().toUpperCase() || "BLACK";
   if (!(MEMBER_PLANS as readonly string[]).includes(plan)) throw new DomainError("PLAN_INVALIDO", "El plan debe ser Black o Gold.");
   const price = p.price ?? (await defaultMemberPrice(db, p.serviceType as MemberType, plan as MemberPlan));
@@ -94,7 +94,7 @@ export async function updateMember(
   if (p.name !== undefined && !p.name.trim()) throw new DomainError("NOMBRE_OBLIGATORIO", "Ingresá el nombre del socio.");
   if (p.serviceType !== undefined && !(MEMBER_TYPES as readonly string[]).includes(p.serviceType)) throw new DomainError("TIPO_INVALIDO", "El tipo debe ser corte o corte y barba.");
   if (p.plan !== undefined && !(MEMBER_PLANS as readonly string[]).includes(p.plan)) throw new DomainError("PLAN_INVALIDO", "El plan debe ser Black o Gold.");
-  if (p.payTiming !== undefined && !(PAY_TIMINGS as readonly string[]).includes(p.payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá si paga a principio o a fin de mes.");
+  if (p.payTiming !== undefined && !(PAY_TIMINGS as readonly string[]).includes(p.payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá la modalidad de pago: por adelantado o devengado.");
   const row = await db.member.update({
     where: { id: p.id },
     data: {
@@ -154,6 +154,39 @@ export async function deleteMembers(db: PrismaClient, p: { actor: Actor; ids: st
     }
   });
   return { deleted: members.length };
+}
+
+/** Cambia la modalidad de pago de varios socios a la vez (por adelantado, devengado a fin de mes o a principio del siguiente). */
+export async function setMembersTiming(db: PrismaClient, p: { actor: Actor; ids: string[]; payTiming: string }) {
+  requireAdmin(p.actor);
+  if (!(PAY_TIMINGS as readonly string[]).includes(p.payTiming)) throw new DomainError("COBRO_INVALIDO", "Indicá la modalidad de pago: por adelantado o devengado.");
+  const ids = [...new Set(p.ids)];
+  if (ids.length === 0) throw new DomainError("SIN_SOCIOS", "Elegí al menos un socio.");
+  if (ids.length > 300) throw new DomainError("DEMASIADOS", "Son demasiados socios a la vez (máximo 300).");
+  const members = await db.member.findMany({ where: { id: { in: ids }, deletedAt: null } });
+  if (members.length === 0) throw new DomainError("SOCIO_INEXISTENTE", "Esos socios no existen.");
+  let changed = 0;
+  await db.$transaction(async (tx) => {
+    for (const m of members) {
+      if (m.payTiming === p.payTiming) continue;
+      await tx.member.update({ where: { id: m.id }, data: { payTiming: p.payTiming } });
+      await audit(tx, { userId: p.actor.id, entity: "Member", entityId: m.id, action: "UPDATE", before: { payTiming: m.payTiming }, after: { payTiming: p.payTiming } });
+      changed++;
+    }
+  });
+  return { changed, total: members.length };
+}
+
+/** Mueve un cobro a otro mes de servicio (por ejemplo, lo que se pagó a fin de octubre por adelantado es de noviembre). */
+export async function setPaymentPeriod(db: PrismaClient, p: { actor: Actor; id: string; period: string }) {
+  requireAdmin(p.actor);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(p.period)) throw new DomainError("MES_INVALIDO", "El mes es inválido.");
+  const e = await db.memberLedger.findUnique({ where: { id: p.id } });
+  if (!e || e.deletedAt || e.kind !== "PAGO") throw new DomainError("MOVIMIENTO_INEXISTENTE", "Ese cobro no existe.");
+  if (e.period === p.period) return e;
+  const row = await db.memberLedger.update({ where: { id: p.id }, data: { period: p.period } });
+  await audit(db, { userId: p.actor.id, entity: "MemberLedger", entityId: p.id, action: "UPDATE", before: { period: e.period }, after: { period: p.period } });
+  return row;
 }
 
 // --- Asistencia -----------------------------------------------------------------------------------------------------------------

@@ -13,7 +13,7 @@ import { DomainError, isAdmin } from "../services/common";
 import { addBarberPayment, setBarberOpening, voidBarberPayment } from "../services/barberpay";
 import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
-import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, registerPayment, setAttendance, setMembersTiming, setPaymentPeriod, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
@@ -322,6 +322,20 @@ export async function saveMemberAdjustment(p: { memberId: string; date: string; 
   return run(async (actor) => {
     await adjustMember(db, { actor, ...p, amount: Number(p.amount) });
     return "Ajuste registrado.";
+  });
+}
+
+export async function changeMembersTiming(p: { ids: string[]; payTiming: string }) {
+  return run(async (actor) => {
+    const r = await setMembersTiming(db, { actor, ...p });
+    return `Modalidad cambiada en ${r.changed} de ${r.total} socio${r.total === 1 ? "" : "s"}.`;
+  });
+}
+
+export async function changePaymentPeriod(p: { id: string; period: string }) {
+  return run(async (actor) => {
+    await setPaymentPeriod(db, { actor, ...p });
+    return "Cobro movido de mes.";
   });
 }
 

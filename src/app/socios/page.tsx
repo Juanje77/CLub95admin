@@ -25,7 +25,7 @@ export default async function SociosPage({ searchParams }: { searchParams: Promi
   const prices: PriceTable = {};
   for (const plan of ["BLACK", "GOLD"] as const) prices[plan] = { CORTE: await defaultMemberPrice(db, "CORTE", plan), CORTE_BARBA: await defaultMemberPrice(db, "CORTE_BARBA", plan) };
   const statement = admin && sp.socio ? await getMemberStatement(db, sp.socio) : [];
-  const ledger: LedgerView[] = admin && sp.socio ? (await getMemberLedger(db, sp.socio)).map((l) => ({ id: l.id, date: l.date, kind: l.kind, debit: l.debit, credit: l.credit, method: l.method, note: l.note })) : [];
+  const ledger: LedgerView[] = admin && sp.socio ? (await getMemberLedger(db, sp.socio)).map((l) => ({ id: l.id, date: l.date, kind: l.kind, debit: l.debit, credit: l.credit, method: l.method, note: l.note, period: l.period })) : [];
 
   // La planilla cuenta "socios" por barbero y día; la asistencia los identifica. Si no coinciden, se avisa (no se corrige solo).
   const diffs: PlanillaDiff[] = [];

@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { editMember, removeMembers, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
+import { changePaymentPeriod, editMember, removeMembers, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
 import { formatARS, formatDate, monthLabel, shiftMonth } from "../domain/money";
-import type { StatementRow } from "../domain/members";
+import { PAY_TIMING_LABEL, type StatementRow } from "../domain/members";
 import type { MemberRow, MembersMonth } from "../services/members";
 import { useAction } from "./useAction";
 import { useOfflineSave } from "./useOfflineSave";
@@ -16,10 +16,11 @@ export const TYPE_LABEL: Record<string, string> = { CORTE: "Corte", CORTE_BARBA:
 export const PLAN_LABEL: Record<string, string> = { BLACK: "Black", GOLD: "Gold" };
 export type PriceTable = Record<string, Record<string, number>>;
 export const STATUS_LABEL: Record<string, string> = { PAGO: "Pagó", PARCIAL: "Parcial", INPAGO: "Impago", PENDIENTE: "Por cobrar", SIN_MOVIMIENTO: "—" };
-export const TIMING_LABEL: Record<string, string> = { INICIO: "A principio de mes (paga el mes que terminó)", FIN: "A fin de mes (paga el mismo mes)" };
+export const TIMING_LABEL: Record<string, string> = PAY_TIMING_LABEL;
+export const TIMING_SHORT: Record<string, string> = { ADELANTADO: "por adelantado", FIN: "devengado, a fin de mes", INICIO: "devengado, a principio del mes siguiente" };
 export const STATUS_CHIP: Record<string, string> = { PAGO: "ok", PARCIAL: "warn", INPAGO: "err", PENDIENTE: "", SIN_MOVIMIENTO: "" };
 
-export interface LedgerView { id: string; date: string; kind: string; debit: number; credit: number; method: string | null; note: string | null }
+export interface LedgerView { id: string; date: string; kind: string; debit: number; credit: number; method: string | null; note: string | null; period: string }
 export interface PlanillaDiff { text: string }
 
 interface Props {
@@ -80,7 +81,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
         <h2 style={{ margin: 0 }}>{m.name}</h2>
         <span className={`chip ${m.balance > 0 ? "err" : "ok"}`}>{m.balance > 0 ? `Debe ${formatARS(m.balance)}` : m.balance < 0 ? `A favor ${formatARS(-m.balance)}` : "Al día"}</span>
       </div>
-      <div className="muted">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]} · {formatARS(m.price)} por sesión · atiende {m.barberName} · paga {m.payTiming === "FIN" ? "a fin de mes" : "a principio de mes"}{m.phone ? ` · ${m.phone}` : ""}</div>
+      <div className="muted">{PLAN_LABEL[m.plan] ?? m.plan} · {TYPE_LABEL[m.serviceType]} · {formatARS(m.price)} por sesión · atiende {m.barberName} · paga {TIMING_SHORT[m.payTiming] ?? m.payTiming}{m.phone ? ` · ${m.phone}` : ""}</div>
       <div className="kv">
         <span>Sesiones del mes</span><b className="num">{m.visits}</b>
         <span>A cobrar del mes</span><b className="num">{formatARS(m.charged)}</b>
@@ -149,9 +150,14 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
         {ledger.map((l) => (
           <li key={l.id}>
             <span>
-              {l.kind === "PAGO" ? "Cobro" : "Ajuste"} <span className="muted">· {formatDate(l.date)}{l.method ? ` · ${l.method === "EFECTIVO" ? "efectivo" : "banco/MP"}` : ""}{l.note ? ` · ${l.note}` : ""}</span>
+              {l.kind === "PAGO" ? "Cobro" : "Ajuste"} <span className="muted">· {formatDate(l.date)}{l.kind === "PAGO" ? ` · de ${monthLabel(l.period)}` : ""}{l.method ? ` · ${l.method === "EFECTIVO" ? "efectivo" : "banco/MP"}` : ""}{l.note ? ` · ${l.note}` : ""}</span>
             </span>
             <span className="num">
+              {l.kind === "PAGO" && (
+                <select aria-label={`Mes al que corresponde el cobro del ${formatDate(l.date)}`} value={l.period} disabled={pending} onChange={(e) => run(() => changePaymentPeriod({ id: l.id, period: e.target.value }))} style={{ width: "auto", marginRight: 6, minHeight: 44 }}>
+                  {[...new Set([...statement.map((r) => r.month), l.period, shiftMonth(today.slice(0, 7), 1), today.slice(0, 7)])].sort().map((mo) => <option key={mo} value={mo}>{monthLabel(mo)}</option>)}
+                </select>
+              )}
               {l.credit > 0 ? `− ${formatARS(l.credit)}` : `+ ${formatARS(l.debit)}`}{" "}
               <button className="btn danger" style={{ minHeight: 44, minWidth: 44, padding: "0 8px" }} aria-label="Anular movimiento" onClick={() => { const reason = prompt("Motivo para anular este movimiento:"); if (reason) run(() => voidMemberEntry({ id: l.id, reason })); }}>✕</button>
             </span>
@@ -179,7 +185,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
           <label className="field"><span>Barbero asignado</span><select value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Sin asignar</option>{barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
           <label className="field"><span>Plan</span><select value={plan} onChange={(e) => setPlan(e.target.value)}><option value="BLACK">Black</option><option value="GOLD">Gold</option></select></label>
           <label className="field"><span>Tipo</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="CORTE">Corte</option><option value="CORTE_BARBA">Corte y barba</option></select></label>
-          <label className="field"><span>Cuándo suele pagar</span><select value={timing} onChange={(e) => setTiming(e.target.value)}>{Object.entries(TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+          <label className="field"><span>Modalidad de pago</span><select value={timing} onChange={(e) => setTiming(e.target.value)}>{Object.entries(TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label className="field"><span>Teléfono</span><input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
           <div className="row">
             <button className="btn" type="submit" disabled={pending || !name.trim()}>Guardar datos</button>
@@ -201,7 +207,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
 export function NewMemberForm({ barbers, prices }: { barbers: { id: string; name: string }[]; prices: PriceTable }) {
   const [name, setName] = useState("");
   const [plan, setPlan] = useState("BLACK");
-  const [timing, setTiming] = useState("INICIO");
+  const [timing, setTiming] = useState("ADELANTADO");
   const [type, setType] = useState("CORTE");
   const [userId, setUserId] = useState("");
   const [price, setPrice] = useState("");
@@ -215,7 +221,7 @@ export function NewMemberForm({ barbers, prices }: { barbers: { id: string; name
         <label className="field"><span>Plan</span><select value={plan} onChange={(e) => setPlan(e.target.value)}><option value="BLACK">Black</option><option value="GOLD">Gold</option></select></label>
         <label className="field"><span>Tipo</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="CORTE">Corte ({formatARS(prices[plan]?.CORTE ?? 0)} por sesión)</option><option value="CORTE_BARBA">Corte y barba ({formatARS(prices[plan]?.CORTE_BARBA ?? 0)} por sesión)</option></select></label>
         <label className="field"><span>Barbero asignado</span><select value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Sin asignar</option>{barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
-        <label className="field"><span>Cuándo suele pagar</span><select value={timing} onChange={(e) => setTiming(e.target.value)}>{Object.entries(TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label className="field"><span>Modalidad de pago</span><select value={timing} onChange={(e) => setTiming(e.target.value)}>{Object.entries(TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label className="field"><span>Precio por sesión (vacío = el del plan)</span><input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
         <label className="field"><span>Teléfono (opcional)</span><input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
         <button className="btn primary" type="submit" disabled={pending || !name.trim()}>Agregar socio</button>

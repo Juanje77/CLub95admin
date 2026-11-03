@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import type { PrismaClient } from "@prisma/client";
-import { applySociosImport, monthFromSheetName, norm, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../src/import/socios";
+import { applySociosImport, monthFromSheetName, norm, timingFrom, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../src/import/socios";
 import { getDayFigures } from "../src/services/figures";
 import { getMembersMonth, getMemberStatement } from "../src/services/members";
 import type { Actor } from "../src/services/common";
@@ -127,5 +127,16 @@ describe("vista previa y carga", () => {
     const plan = await planSociosImport(db, await parse([["MAURO REY", "BLACK", "CORTE", "JERE", 4, 16250, 65000, 65000, null, "MES ACTUAL"]]), NOW);
     expect(plan.rows[0]).toMatchObject({ payDateUsed: "2026-10-01" });
     expect(plan.rows[0]!.warnings.join(" ")).toContain("no tiene fecha");
+  });
+});
+
+describe("modalidad de pago deducida de la hoja", () => {
+  it("'mes siguiente' = por adelantado; 'mes anterior' = devengado a principio de mes; sin indicar, según el día del cobro", () => {
+    expect(timingFrom(1, 28)).toBe("ADELANTADO"); // paga a fin de octubre noviembre
+    expect(timingFrom(1, null)).toBe("ADELANTADO");
+    expect(timingFrom(-1, 3)).toBe("INICIO");
+    expect(timingFrom(0, 27)).toBe("FIN"); // 4 o 5 cortes devengados, pagados a fin de mes
+    expect(timingFrom(0, 3)).toBe("ADELANTADO"); // paga a principio de mes el mes en curso
+    expect(timingFrom(0, null)).toBe("INICIO");
   });
 });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, getMemberLedger, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, getMemberLedger, setMembersTiming, setPaymentPeriod, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
 import { getDayFigures } from "../src/services/figures";
 import { getMonthGrid } from "../src/services/grid";
 import { computeSettlement } from "../src/services/settlement";
@@ -367,5 +367,50 @@ describe("eliminar socios", () => {
     expect(await code(deleteMembers(db, { actor: ale, ids: ["no-existe"], reason: "x" }))).toBe("SOCIO_INEXISTENTE");
     await deleteMembers(db, { actor: ale, ids: [m1], reason: "x" });
     expect(await code(deleteMembers(db, { actor: ale, ids: [m1], reason: "x" }))).toBe("SOCIO_INEXISTENTE"); // ya eliminado
+  });
+});
+
+describe("socios que pagan por adelantado vs. devengado", () => {
+  it("el adelantado paga el mes antes: vence en los primeros días del mismo mes y un cobro de fin de mes es del mes que viene", () => {
+    expect(dueDate("2026-11", "ADELANTADO", 10)).toBe("2026-11-10");
+    expect(defaultPeriod("ADELANTADO", "2026-10-28", null, 10)).toBe("2026-11"); // paga a fin de octubre noviembre
+    expect(defaultPeriod("ADELANTADO", "2026-12-28", null, 10)).toBe("2027-01");
+    expect(defaultPeriod("ADELANTADO", "2026-11-03", null, 10)).toBe("2026-11"); // paga a principio de mes el mes en curso
+    expect(defaultPeriod("ADELANTADO", "2026-10-28", "2026-10", 10)).toBe("2026-10"); // si debe, cubre lo más viejo
+  });
+
+  it("el adelantado tiene noviembre por cobrar hasta el 10 y después impago; el devengado de octubre ya venció", async () => {
+    const adel = (await createMember(db, { actor: ale, name: "Adelantado", serviceType: "CORTE", userId: null, price: 16500, payTiming: "ADELANTADO", now: NOW })).id;
+    const dev = (await createMember(db, { actor: ale, name: "Devengado", serviceType: "CORTE", userId: null, price: 16500, payTiming: "FIN", now: NOW })).id;
+    for (const [id, month] of [[adel, "2026-11"], [dev, "2026-10"]] as const) await setMemberSessions(db, { actor: ale, memberId: id, month, sessions: 4 });
+    const at = async (id: string, month: string, d: string) => (await getMembersMonth(db, month, new Date(`${d}T15:00:00Z`))).members.find((m) => m.id === id)!.status;
+    expect(await at(adel, "2026-11", "2026-11-03")).toBe("PENDIENTE");
+    expect(await at(adel, "2026-11", "2026-11-12")).toBe("INPAGO");
+    expect(await at(dev, "2026-10", "2026-10-25")).toBe("PENDIENTE");
+    expect(await at(dev, "2026-10", "2026-11-03")).toBe("INPAGO");
+  });
+
+  it("cambia la modalidad de varios socios a la vez, con auditoría, y solo el admin", async () => {
+    expect(await code(setMembersTiming(db, { actor: lucio, ids: [m1, m2], payTiming: "ADELANTADO" }))).toBe("SOLO_ADMIN");
+    expect(await code(setMembersTiming(db, { actor: ale, ids: [m1], payTiming: "NUNCA" }))).toBe("COBRO_INVALIDO");
+    expect(await code(setMembersTiming(db, { actor: ale, ids: [], payTiming: "FIN" }))).toBe("SIN_SOCIOS");
+    expect(await setMembersTiming(db, { actor: ale, ids: [m1, m2], payTiming: "ADELANTADO" })).toEqual({ changed: 2, total: 2 });
+    expect((await db.member.findUniqueOrThrow({ where: { id: m1 } })).payTiming).toBe("ADELANTADO");
+    expect(await setMembersTiming(db, { actor: ale, ids: [m1, m2], payTiming: "ADELANTADO" })).toEqual({ changed: 0, total: 2 }); // ya estaban
+    expect(await db.auditLog.count({ where: { entity: "Member", action: "UPDATE" } })).toBeGreaterThanOrEqual(2);
+  });
+
+  it("mueve un cobro de mes y la deuda se recalcula", async () => {
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-10", sessions: 4 });
+    await setMemberSessions(db, { actor: ale, memberId: m1, month: "2026-11", sessions: 4 });
+    const pay = await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-03", amount: 66000, method: "BANCO", period: "2026-10", now: NOW });
+    const paidOf = async (month: string) => (await getMemberStatement(db, m1, NOW)).find((r) => r.month === month)?.paid ?? 0;
+    expect(await paidOf("2026-10")).toBe(66000);
+    await setPaymentPeriod(db, { actor: ale, id: pay.id, period: "2026-11" });
+    expect(await paidOf("2026-10")).toBe(0);
+    expect(await paidOf("2026-11")).toBe(66000);
+    expect(await code(setPaymentPeriod(db, { actor: lucio, id: pay.id, period: "2026-10" }))).toBe("SOLO_ADMIN");
+    expect(await code(setPaymentPeriod(db, { actor: ale, id: pay.id, period: "octubre" }))).toBe("MES_INVALIDO");
+    expect((await db.auditLog.findMany({ where: { entityId: pay.id, action: "UPDATE" } })).length).toBe(1);
   });
 });

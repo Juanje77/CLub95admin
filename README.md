@@ -76,7 +76,11 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
 - Cada socio tiene **plan** (Black / Gold), **tipo** (corte / corte y barba), barbero asignado y precio por sesión con vigencia. Precios por defecto: Black $ 16.250 / $ 17.500, Gold $ 20.000 / $ 23.000 (se cambian en `Setting` `memberPrices`; un socio puede tener un precio propio, como el de $ 13.750 de la planilla).
 - **Sesiones del mes:** se escribe el número en la tabla (como la columna SESIONES). Si no se escribe, se cuentan las asistencias tildadas en la vista *Asistencia por día*. Vaciar el campo vuelve a contar la asistencia.
 - Por fila: **total** (sesiones × precio), **cobrado**, **diferencia** (cobrado − total), **estado** (Pagó / Parcial / **Por cobrar** / Impago), fecha del último pago y saldo.
-- **Cuándo paga cada socio:** cada socio paga **a principio de mes** (los primeros días, lo del mes que terminó) o **a fin de mes** (lo del mismo mes); se elige en su ficha. Un mes sin pagar figura como *Por cobrar* hasta que vence (a principio de mes: el día 10 del mes siguiente; a fin de mes: el último día del mes) y recién después como *Impago*. Un cobro sin mes indicado cubre el mes más viejo que debe; si no debe nada, el mes que terminó (principio de mes, primeros días) o el mismo mes (fin de mes).
+- **Modalidad de pago de cada socio** (se elige en su ficha, al crearlo, o **en bloque**: *Seleccionar* → elegir socios → *Cambiar modalidad*):
+  - **Por adelantado:** paga el mes antes de los cortes (por ejemplo, a fin de octubre paga noviembre). Un cobro del día 20 en adelante sin mes indicado es del mes que viene; antes del 20, del mes en curso. Su mes figura *Por cobrar* hasta el día 10 de ese mismo mes y después *Impago*.
+  - **Devengado, a fin de mes:** paga los 4 o 5 cortes que ya hizo en el mes, a fin de mes. Vence el último día del mes.
+  - **Devengado, a principio del mes siguiente:** paga los cortes del mes que terminó en los primeros días del siguiente. Vence el día 10.
+  Un cobro sin mes indicado cubre el mes más viejo que debe. Si un cobro quedó en el mes equivocado, en la ficha de cada cobro hay un selector para **moverlo de mes** (queda auditado).
 - **Cuenta corriente** (si un socio no paga): lo que no se paga **se arrastra de un mes al siguiente** y queda a la vista en "quién debe" (con desde qué mes) y, por socio, en una tabla mes a mes con saldo acumulado.
 - **Cobros:** llevan medio (efectivo / banco) y **no entran a la caja del día**: van al panel *Efectivo y cuentas* de Socios. El campo **Corresponde a** (la columna MES QUE CORRESPONDE) indica el mes de servicio que cubre: mes anterior, actual o siguiente; si se deja en automático, cubre el mes **más viejo que debe** (y si no debe nada, queda como pago adelantado).
 - Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).
@@ -132,7 +136,7 @@ Para cada cuenta se ve lo que **debería entrar** (si nada se hubiera pagado en 
 
 **Socios → "Cargar los socios desde la planilla de Excel"** (solo admin/dueño). Se sube `Club95_v3.xlsx`, se elige la hoja del mes y se ve una **vista previa antes de guardar**:
 
-- Se crean los socios que faltan (plan, tipo, barbero, precio propio si la fila lo trae distinto del plan y cuándo suelen pagar: cobros del 20 al fin de mes = fin de mes; el resto, principio de mes).
+- Se crean los socios que faltan (plan, tipo, barbero, precio propio si la fila lo trae distinto del plan y su modalidad de pago: "mes siguiente" = por adelantado; "mes anterior" = devengado a principio de mes; sin indicar, un cobro del 20 al fin de mes = devengado a fin de mes y uno de principio de mes = por adelantado).
 - Las **sesiones** y el **cobro** de cada fila van al mes que dice *MES QUE CORRESPONDE* (mes anterior / actual / siguiente de la hoja). Quien no pagó queda debiendo en la cuenta corriente.
 - Los cobros se registran como transferencia/banco (la planilla no dice el medio). Si el cobro no tiene fecha, se usa el primer día del mes de la hoja. Si el día de un cobro ya está cerrado en la caja, **ese cobro no se carga** (para no mover un cierre): se avisa.
 - Se avisa y **no se carga** lo que no se puede: filas sin plan o sin tipo, filas con datos pero sin nombre, nombres repetidos. Si el barbero de la planilla no está cargado en el equipo (por ejemplo Beni o Betún), el socio queda **sin asignar**.

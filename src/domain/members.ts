@@ -10,8 +10,12 @@ export const DEFAULT_MEMBER_PRICES = {
   GOLD: { CORTE: 20000, CORTE_BARBA: 23000 },
 } as const;
 
-export const PAY_TIMINGS = ["INICIO", "FIN"] as const;
-/** INICIO: paga a principio de mes lo del mes que terminó. FIN: paga a fin de mes lo del mismo mes. */
+export const PAY_TIMINGS = ["ADELANTADO", "INICIO", "FIN"] as const;
+/**
+ * ADELANTADO: paga el mes por adelantado (a fin del mes anterior o a principio del mes, antes de hacerse los cortes).
+ * INICIO: devengado, paga a principio de mes los cortes del mes que terminó.
+ * FIN: devengado, paga a fin de mes los cortes (4 o 5) del mismo mes.
+ */
 export type PayTiming = (typeof PAY_TIMINGS)[number];
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -22,13 +26,24 @@ const nextMonth = (month: string) => {
 
 /** Último día en que el mes de servicio `month` todavía no se considera vencido, según cuándo suele pagar el socio. */
 export function dueDate(month: string, timing: PayTiming, debtDay: number): string {
+  if (timing === "ADELANTADO") return `${month}-${pad(debtDay)}`; // lo paga antes de que empiece, con unos días de gracia
   return timing === "FIN" ? `${month}-31` : `${nextMonth(month)}-${pad(debtDay)}`;
 }
+
+/** Día del mes desde el que un cobro adelantado se toma como del mes que viene (se paga a fin de mes lo del mes siguiente). */
+export const ADVANCE_FROM_DAY = 20;
+
+export const PAY_TIMING_LABEL: Record<PayTiming, string> = {
+  ADELANTADO: "Por adelantado (paga el mes antes de los cortes)",
+  FIN: "Devengado, a fin de mes (paga los 4 o 5 cortes del mes)",
+  INICIO: "Devengado, a principio del mes siguiente",
+};
 
 /** Mes de servicio al que corresponde un cobro cuando no se indica: el más viejo con deuda; si no hay, según cuándo paga. */
 export function defaultPeriod(timing: PayTiming, payDate: string, oldestUnpaid: string | null, debtDay: number): string {
   if (oldestUnpaid) return oldestUnpaid;
   const month = payDate.slice(0, 7);
+  if (timing === "ADELANTADO") return Number(payDate.slice(8, 10)) >= ADVANCE_FROM_DAY ? nextMonth(month) : month;
   if (timing === "INICIO" && Number(payDate.slice(8, 10)) <= debtDay) {
     const [y, m] = month.split("-").map(Number) as [number, number];
     return m === 1 ? `${y - 1}-12` : `${y}-${pad(m - 1)}`;

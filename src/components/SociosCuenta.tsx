@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { copyMonthSessions, removeMembers, saveMemberPayment, saveMemberSessions } from "../app/actions";
-import type { StatementRow } from "../domain/members";
+import { changeMembersTiming, copyMonthSessions, removeMembers, saveMemberPayment, saveMemberSessions } from "../app/actions";
+import { PAY_TIMING_LABEL, type StatementRow } from "../domain/members";
 import { formatARS, formatDate, monthLabel } from "../domain/money";
 import type { MemberRow, MembersMonth } from "../services/members";
 import { MemberDrawer, MemberPanel, NewMemberForm, PLAN_LABEL, STATUS_CHIP, STATUS_LABEL, TYPE_LABEL, ViewSwitch, type LedgerView, type PriceTable } from "./SociosGrid";
@@ -104,6 +104,8 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
   const [paying, setPaying] = useState<string | null>(null);
   const copy = useAction();
   const del = useAction();
+  const chg = useAction();
+  const [bulkTiming, setBulkTiming] = useState("ADELANTADO");
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [reason, setReason] = useState("");
@@ -170,6 +172,7 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
       </div>
       {copy.toast}
       {del.toast}
+      {chg.toast}
       {pay.toast}
 
       <div className="gridwrap" role="region" aria-label="Cuenta mensual de socios" tabIndex={0}>
@@ -255,8 +258,14 @@ export default function SociosCuenta({ data, today, prevMonth, nextMonth, barber
       </div>
 
       {selecting && picked.length > 0 && (
-        <div className="selbar" role="region" aria-label="Eliminar socios elegidos">
+        <div className="selbar" role="region" aria-label="Socios elegidos">
           <b>{picked.length} socio{picked.length === 1 ? "" : "s"} elegido{picked.length === 1 ? "" : "s"}</b>
+          <div className="row" style={{ flexWrap: "nowrap" }}>
+            <select value={bulkTiming} onChange={(e) => setBulkTiming(e.target.value)} aria-label="Modalidad de pago para los elegidos" style={{ flex: 1, minWidth: 0 }}>
+              {Object.entries(PAY_TIMING_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <button type="button" className="btn" disabled={chg.pending} onClick={() => chg.run(() => changeMembersTiming({ ids: picked, payTiming: bulkTiming }), () => { setPicked([]); setSelecting(false); })}>Cambiar modalidad</button>
+          </div>
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo (obligatorio): ej. importados de más" aria-label="Motivo de la eliminación" />
           <button
             type="button"
