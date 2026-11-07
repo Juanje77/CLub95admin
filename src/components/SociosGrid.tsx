@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { changePaymentPeriod, editMember, removeMembers, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
+import type { ActionResult } from "../app/actions";
+import { changePaymentPeriod, editMember, editMemberPayment, removeMembers, saveMember, saveMemberAdjustment, saveMemberPayment, saveMemberPrice, voidMemberEntry } from "../app/actions";
 import { formatARS, formatDate, monthLabel, shiftMonth } from "../domain/money";
 import { PAY_TIMING_LABEL, type StatementRow } from "../domain/members";
 import type { MemberRow, MembersMonth } from "../services/members";
@@ -51,6 +52,35 @@ function AttendanceCell({ m, date, editable, on, pending, onToggle }: { m: Membe
     >
       {on ? "✓" : ""}
     </button>
+  );
+}
+
+/** Corrige un cobro ya cargado (monto, fecha, medio, mes o nota) sin anularlo. */
+function PaymentEdit({ l, months, today, pending, run }: { l: LedgerView; months: string[]; today: string; pending: boolean; run: (fn: () => Promise<ActionResult>, onOk?: () => void) => void }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(String(l.credit));
+  const [date, setDate] = useState(l.date);
+  const [method, setMethod] = useState(l.method ?? "BANCO");
+  const [period, setPeriod] = useState(l.period);
+  const [note, setNote] = useState(l.note ?? "");
+  if (!open) return <button className="btn" style={{ minHeight: 44, padding: "0 10px", marginRight: 6 }} onClick={() => setOpen(true)} aria-label={`Corregir el cobro del ${formatDate(l.date)}`}>Corregir</button>;
+  return (
+    <form style={{ flexBasis: "100%", marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); run(() => editMemberPayment({ id: l.id, amount: num(amount), date, method, period, note }), () => setOpen(false)); }}>
+      <label className="field"><span>Monto ($)</span><input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+      <div className="row">
+        <label className="field" style={{ flex: 1 }}><span>Fecha</span><input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
+        <label className="field" style={{ flex: 1 }}><span>Mes al que corresponde</span><select value={period} onChange={(e) => setPeriod(e.target.value)}>{months.map((mo) => <option key={mo} value={mo}>{monthLabel(mo)}</option>)}</select></label>
+      </div>
+      <div className="seg" role="group" aria-label="Medio de pago" style={{ marginBottom: 8 }}>
+        <button type="button" aria-pressed={method === "EFECTIVO"} onClick={() => setMethod("EFECTIVO")}>Efectivo</button>
+        <button type="button" aria-pressed={method === "BANCO"} onClick={() => setMethod("BANCO")}>Banco / Mercado Pago</button>
+      </div>
+      <label className="field"><span>Nota (opcional)</span><input value={note} onChange={(e) => setNote(e.target.value)} /></label>
+      <div className="row">
+        <button className="btn primary" type="submit" disabled={pending || num(amount) <= 0}>Guardar cambios</button>
+        <button className="btn" type="button" onClick={() => setOpen(false)}>Cancelar</button>
+      </div>
+    </form>
   );
 }
 
@@ -153,6 +183,7 @@ export function MemberPanel({ m, ledger, statement, barbers, today }: { m: Membe
               {l.kind === "PAGO" ? "Cobro" : "Ajuste"} <span className="muted">· {formatDate(l.date)}{l.kind === "PAGO" ? ` · de ${monthLabel(l.period)}` : ""}{l.method ? ` · ${l.method === "EFECTIVO" ? "efectivo" : "banco/MP"}` : ""}{l.note ? ` · ${l.note}` : ""}</span>
             </span>
             <span className="num">
+              {l.kind === "PAGO" && <PaymentEdit key={`${l.id}-${l.credit}-${l.date}-${l.method}-${l.period}-${l.note}`} l={l} months={[...new Set([...statement.map((r) => r.month), l.period, shiftMonth(today.slice(0, 7), 1), today.slice(0, 7)])].sort()} today={today} pending={pending} run={run} />}
               {l.kind === "PAGO" && (
                 <select aria-label={`Mes al que corresponde el cobro del ${formatDate(l.date)}`} value={l.period} disabled={pending} onChange={(e) => run(() => changePaymentPeriod({ id: l.id, period: e.target.value }))} style={{ width: "auto", marginRight: 6, minHeight: 44 }}>
                   {[...new Set([...statement.map((r) => r.month), l.period, shiftMonth(today.slice(0, 7), 1), today.slice(0, 7)])].sort().map((mo) => <option key={mo} value={mo}>{monthLabel(mo)}</option>)}
@@ -360,11 +391,12 @@ export function MemberDrawer({ closeHref, children }: { closeHref: string; child
   );
 }
 
-export type SociosView = "cuenta" | "asistencia" | "cajas";
+export type SociosView = "cuenta" | "asistencia" | "cajas" | "cobros";
 
 export function ViewSwitch({ month, current }: { month: string; current: SociosView }) {
   const tabs: { id: SociosView; label: string; href: string }[] = [
     { id: "cuenta", label: "Cuenta mensual", href: `/socios?mes=${month}` },
+    { id: "cobros", label: "Cobros", href: `/socios?mes=${month}&vista=cobros` },
     { id: "cajas", label: "Efectivo y cuentas", href: `/socios?mes=${month}&vista=cajas` },
     { id: "asistencia", label: "Asistencia", href: `/socios?mes=${month}&vista=asistencia` },
   ];

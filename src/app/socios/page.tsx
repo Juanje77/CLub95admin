@@ -1,3 +1,4 @@
+import SociosCobros from "../../components/SociosCobros";
 import SociosCajas from "../../components/SociosCajas";
 import SociosCuenta from "../../components/SociosCuenta";
 import SociosGrid, { type LedgerView, type PlanillaDiff, type PriceTable } from "../../components/SociosGrid";
@@ -8,7 +9,7 @@ import { db } from "../../lib/db";
 import { isAdmin } from "../../services/common";
 import { getMonthGrid, monthDates } from "../../services/grid";
 import { getMemberFunds } from "../../services/memberfunds";
-import { defaultMemberPrice, getMemberLedger, getMembersMonth, getMemberStatement } from "../../services/members";
+import { defaultMemberPrice, getMemberLedger, getMembersMonth, getMemberStatement, listMonthPayments } from "../../services/members";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,14 @@ export default async function SociosPage({ searchParams }: { searchParams: Promi
         if (inGrid !== marked) diffs.push({ text: `${formatDate(d.date)} · ${nameOf.get(b.id)}: la planilla tiene ${inGrid} socio${inGrid === 1 ? "" : "s"} y la asistencia marca ${marked}.` });
       }
     }
+  }
+
+  if (admin && sp.vista === "cobros") {
+    return (
+      <Shell user={user} wide>
+        <SociosCobros month={month} rows={await listMonthPayments(db, month)} prevMonth={shiftMonth(month, -1)} nextMonth={shiftMonth(month, 1)} />
+      </Shell>
+    );
   }
 
   if (admin && sp.vista === "cajas") {

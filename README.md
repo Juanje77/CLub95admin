@@ -80,7 +80,10 @@ Funciona como la hoja de socios (`OCTUBRE 2026` de `Club95_v3.xlsx`): **una fila
   - **Por adelantado:** paga el mes antes de los cortes (por ejemplo, a fin de octubre paga noviembre). Un cobro del día 20 en adelante sin mes indicado es del mes que viene; antes del 20, del mes en curso. Su mes figura *Por cobrar* hasta el día 10 de ese mismo mes y después *Impago*.
   - **Devengado, a fin de mes:** paga los 4 o 5 cortes que ya hizo en el mes, a fin de mes. Vence el último día del mes.
   - **Devengado, a principio del mes siguiente:** paga los cortes del mes que terminó en los primeros días del siguiente. Vence el día 10.
-  Un cobro sin mes indicado cubre el mes más viejo que debe. Si un cobro quedó en el mes equivocado, en la ficha de cada cobro hay un selector para **moverlo de mes** (queda auditado).
+  Un cobro sin mes indicado cubre el mes más viejo que debe.
+- **Corregir cobros ya cargados:**
+  - En la ficha de cada cobro, **Corregir** cambia monto, fecha, medio de pago, mes al que corresponde y nota sin anularlo; el selector de mes lo mueve al toque. Queda auditado con el valor anterior.
+  - **Socios → Cobros** lista todos los cobros del mes (los cargados ese mes y los que le corresponden). Marca con ⚠ los cobrados *antes* del mes al que quedaron asignados (suele ser un mes mal cargado, por ejemplo cobros de octubre que quedaron en noviembre). Se eligen varios y **Mover a ese mes** los pasa de una vez; la deuda de cada socio se recalcula sola.
 - **Cuenta corriente** (si un socio no paga): lo que no se paga **se arrastra de un mes al siguiente** y queda a la vista en "quién debe" (con desde qué mes) y, por socio, en una tabla mes a mes con saldo acumulado.
 - **Cobros:** llevan medio (efectivo / banco) y **no entran a la caja del día**: van al panel *Efectivo y cuentas* de Socios. El campo **Corresponde a** (la columna MES QUE CORRESPONDE) indica el mes de servicio que cubre: mes anterior, actual o siguiente; si se deja en automático, cubre el mes **más viejo que debe** (y si no debe nada, queda como pago adelantado).
 - Los ajustes llevan motivo obligatorio y los movimientos se anulan (no se borran).

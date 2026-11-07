@@ -13,7 +13,7 @@ import { DomainError, isAdmin } from "../services/common";
 import { addBarberPayment, setBarberOpening, voidBarberPayment } from "../services/barberpay";
 import { addFundEntry, voidFundEntry } from "../services/memberfunds";
 import { applySociosImport, parseSociosSheet, planSociosImport, readSociosWorkbook, sociosSheets } from "../import/socios";
-import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, registerPayment, setAttendance, setMembersTiming, setPaymentPeriod, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, registerPayment, setAttendance, editPayment, setMembersTiming, setPaymentsPeriod, setPaymentPeriod, setMemberSessions, updateMember, voidLedgerEntry } from "../services/members";
 import { addExpense, addExtraIncome, createConcept, createRecurring, deleteExpense, deleteExtraIncome, deleteRecurring, setConceptActive, updateExpense } from "../services/expenses";
 import { addBarberRule, addProductPrice, addTariff, adjustStock, changeOwnPin, createBarber, createProduct, resetPin, setUserActive, updateProductSettings } from "../services/admin";
 
@@ -329,6 +329,20 @@ export async function changeMembersTiming(p: { ids: string[]; payTiming: string 
   return run(async (actor) => {
     const r = await setMembersTiming(db, { actor, ...p });
     return `Modalidad cambiada en ${r.changed} de ${r.total} socio${r.total === 1 ? "" : "s"}.`;
+  });
+}
+
+export async function editMemberPayment(p: { id: string; amount: number; date: string; method: string; period: string; note: string }) {
+  return run(async (actor) => {
+    await editPayment(db, { actor, ...p, amount: int(p.amount) });
+    return "Cobro corregido.";
+  });
+}
+
+export async function movePaymentsPeriod(p: { ids: string[]; period: string }) {
+  return run(async (actor) => {
+    const r = await setPaymentsPeriod(db, { actor, ...p });
+    return `${r.moved} cobro${r.moved === 1 ? "" : "s"} movido${r.moved === 1 ? "" : "s"} de mes.`;
   });
 }
 

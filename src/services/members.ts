@@ -189,6 +189,62 @@ export async function setPaymentPeriod(db: PrismaClient, p: { actor: Actor; id: 
   return row;
 }
 
+/** Corrige un cobro ya cargado (monto, fecha, medio de pago, mes al que corresponde o nota) sin anularlo y volver a cargarlo. Queda auditado con lo anterior. */
+export async function editPayment(db: PrismaClient, p: { actor: Actor; id: string; amount?: number; date?: string; method?: string; period?: string; note?: string; now?: Date }) {
+  requireAdmin(p.actor);
+  const e = await db.memberLedger.findUnique({ where: { id: p.id } });
+  if (!e || e.deletedAt || e.kind !== "PAGO") throw new DomainError("MOVIMIENTO_INEXISTENTE", "Ese cobro no existe.");
+  if (p.amount !== undefined) checkMoney(p.amount);
+  if (p.date !== undefined) checkDate(p.date, p.now ?? new Date());
+  if (p.method !== undefined && !(PAY_METHODS as readonly string[]).includes(p.method)) throw new DomainError("MEDIO_DE_PAGO_INVALIDO", "Elegí efectivo o banco/Mercado Pago.");
+  if (p.period !== undefined && !MONTH_RE.test(p.period)) throw new DomainError("MES_INVALIDO", "El mes al que corresponde el cobro es inválido.");
+  const data = {
+    ...(p.amount !== undefined ? { credit: p.amount } : {}),
+    ...(p.date !== undefined ? { date: p.date } : {}),
+    ...(p.method !== undefined ? { method: p.method } : {}),
+    ...(p.period !== undefined ? { period: p.period } : {}),
+    ...(p.note !== undefined ? { note: p.note.trim() || null } : {}),
+  };
+  const before = { amount: e.credit, date: e.date, method: e.method, period: e.period, note: e.note };
+  const after = { amount: data.credit ?? e.credit, date: data.date ?? e.date, method: data.method ?? e.method, period: data.period ?? e.period, note: "note" in data ? data.note : e.note };
+  if (JSON.stringify(before) === JSON.stringify(after)) return e;
+  const row = await db.memberLedger.update({ where: { id: p.id }, data });
+  await audit(db, { userId: p.actor.id, entity: "MemberLedger", entityId: p.id, action: "UPDATE", before, after });
+  return row;
+}
+
+export interface MonthPayment { id: string; memberId: string; memberName: string; date: string; amount: number; method: string | null; period: string; note: string | null }
+
+/** Cobros de socios cargados en el mes (por fecha) o que corresponden a ese mes (por período), para revisarlos y corregir el mes de cada uno. */
+export async function listMonthPayments(db: Db, month: string): Promise<MonthPayment[]> {
+  const rows = await db.memberLedger.findMany({
+    where: { kind: "PAGO", deletedAt: null, OR: [{ date: monthRange(month) }, { period: month }], member: { deletedAt: null } },
+    include: { member: true },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+  });
+  return rows.map((r) => ({ id: r.id, memberId: r.memberId, memberName: r.member.name, date: r.date, amount: r.credit, method: r.method, period: r.period, note: r.note }));
+}
+
+/** Mueve varios cobros al mismo mes de servicio de una vez (por ejemplo, los de octubre que quedaron en noviembre). */
+export async function setPaymentsPeriod(db: PrismaClient, p: { actor: Actor; ids: string[]; period: string }) {
+  requireAdmin(p.actor);
+  if (!MONTH_RE.test(p.period)) throw new DomainError("MES_INVALIDO", "El mes es inválido.");
+  const ids = [...new Set(p.ids)];
+  if (ids.length === 0) throw new DomainError("SIN_COBROS", "Elegí al menos un cobro.");
+  if (ids.length > 500) throw new DomainError("DEMASIADOS", "Son demasiados cobros a la vez (máximo 500).");
+  const rows = await db.memberLedger.findMany({ where: { id: { in: ids }, kind: "PAGO", deletedAt: null } });
+  let moved = 0;
+  await db.$transaction(async (tx) => {
+    for (const e of rows) {
+      if (e.period === p.period) continue;
+      await tx.memberLedger.update({ where: { id: e.id }, data: { period: p.period } });
+      await audit(tx, { userId: p.actor.id, entity: "MemberLedger", entityId: e.id, action: "UPDATE", before: { period: e.period }, after: { period: p.period } });
+      moved++;
+    }
+  });
+  return { moved, total: rows.length };
+}
+
 // --- Asistencia -----------------------------------------------------------------------------------------------------------------
 // Tildar a un socio el día que viene. Cada asistencia se cobra al precio vigente y suma al barbero que lo atendió.
 

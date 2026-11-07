@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, getMemberLedger, setMembersTiming, setPaymentPeriod, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
+import { addMemberPrice, adjustMember, copySessionsFromPreviousMonth, createMember, deleteMembers, getMemberLedger, setMembersTiming, setPaymentPeriod, editPayment, listMonthPayments, setPaymentsPeriod, getMembersMonth, getMemberStatement, memberAlertData, membershipLaborFor, membershipMonthTotals, registerPayment, setAttendance, setMemberSessions, updateMember, voidLedgerEntry } from "../src/services/members";
 import { getDayFigures } from "../src/services/figures";
 import { getMonthGrid } from "../src/services/grid";
 import { computeSettlement } from "../src/services/settlement";
@@ -412,5 +412,41 @@ describe("socios que pagan por adelantado vs. devengado", () => {
     expect(await code(setPaymentPeriod(db, { actor: lucio, id: pay.id, period: "2026-10" }))).toBe("SOLO_ADMIN");
     expect(await code(setPaymentPeriod(db, { actor: ale, id: pay.id, period: "octubre" }))).toBe("MES_INVALIDO");
     expect((await db.auditLog.findMany({ where: { entityId: pay.id, action: "UPDATE" } })).length).toBe(1);
+  });
+});
+
+describe("corregir cobros ya cargados", () => {
+  it("edita monto, fecha, medio, mes y nota de un cobro, con auditoría, sin anularlo", async () => {
+    const pay = await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-03", amount: 10000, method: "BANCO", period: "2026-10", now: NOW });
+    await editPayment(db, { actor: ale, id: pay.id, amount: 12000, date: "2026-10-02", method: "EFECTIVO", period: "2026-09", note: "corregido", now: NOW });
+    const row = await db.memberLedger.findUniqueOrThrow({ where: { id: pay.id } });
+    expect(row).toMatchObject({ credit: 12000, date: "2026-10-02", method: "EFECTIVO", period: "2026-09", note: "corregido", deletedAt: null });
+    const log = await db.auditLog.findMany({ where: { entityId: pay.id, action: "UPDATE" } });
+    expect(log.length).toBe(1);
+    expect(JSON.parse(log[0]!.before!)).toMatchObject({ amount: 10000, period: "2026-10" });
+    await editPayment(db, { actor: ale, id: pay.id, amount: 12000, now: NOW }); // sin cambios: no audita de nuevo
+    expect((await db.auditLog.findMany({ where: { entityId: pay.id, action: "UPDATE" } })).length).toBe(1);
+  });
+  it("valida y solo el admin", async () => {
+    const pay = await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-03", amount: 10000, method: "BANCO", now: NOW });
+    expect(await code(editPayment(db, { actor: lucio, id: pay.id, amount: 1 }))).toBe("SOLO_ADMIN");
+    expect(await code(editPayment(db, { actor: ale, id: pay.id, amount: 0 }))).toBe("MONTO_INVALIDO");
+    expect(await code(editPayment(db, { actor: ale, id: pay.id, date: "2027-01-01", now: NOW }))).toBe("FECHA_FUTURA");
+    expect(await code(editPayment(db, { actor: ale, id: pay.id, method: "TRUEQUE" }))).toBe("MEDIO_DE_PAGO_INVALIDO");
+    expect(await code(editPayment(db, { actor: ale, id: pay.id, period: "x" }))).toBe("MES_INVALIDO");
+    expect(await code(editPayment(db, { actor: ale, id: "inventado", amount: 5 }))).toBe("MOVIMIENTO_INEXISTENTE");
+  });
+  it("lista los cobros del mes y mueve varios de mes de una vez", async () => {
+    const a = await registerPayment(db, { actor: ale, memberId: m1, date: "2026-10-05", amount: 10000, method: "BANCO", period: "2026-11", now: NOW });
+    const b = await registerPayment(db, { actor: ale, memberId: m2, date: "2026-10-06", amount: 8000, method: "EFECTIVO", period: "2026-11", now: NOW });
+    const oct = await listMonthPayments(db, "2026-10");
+    expect(oct.map((r) => r.id).sort()).toEqual([a.id, b.id].sort()); // cargados en octubre
+    const nov = await listMonthPayments(db, "2026-11");
+    expect(nov.length).toBe(2); // asignados a noviembre
+    expect(await setPaymentsPeriod(db, { actor: ale, ids: [a.id, b.id], period: "2026-10" })).toEqual({ moved: 2, total: 2 });
+    expect((await listMonthPayments(db, "2026-11")).length).toBe(0);
+    expect(await setPaymentsPeriod(db, { actor: ale, ids: [a.id, b.id], period: "2026-10" })).toEqual({ moved: 0, total: 2 });
+    expect(await code(setPaymentsPeriod(db, { actor: ale, ids: [], period: "2026-10" }))).toBe("SIN_COBROS");
+    expect(await code(setPaymentsPeriod(db, { actor: lucio, ids: [a.id], period: "2026-10" }))).toBe("SOLO_ADMIN");
   });
 });

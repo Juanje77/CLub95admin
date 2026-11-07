@@ -403,7 +403,21 @@ await page.getByRole("heading", { name: "Pagos y devoluciones de este mes" }).wa
 await page.waitForFunction(() => /Lucio/.test([...document.querySelectorAll("ul.list.card")].pop()?.textContent ?? ""));
 check(true, "el pago a Lucio queda registrado y baja lo que falta");
 await shot("a-pagar-barberos");
+// Cobros de socios: ver todos los del mes y corregirlos / moverlos de mes.
+await page.goto(BASE + "/socios?vista=cobros");
+await page.getByRole("heading", { name: new RegExp(`Cobros · ${MES}`, "i") }).waitFor();
+const cobrosTxt = await page.locator("body").innerText();
+check(/cobros\s*\d+/i.test(cobrosTxt), "la pantalla Cobros lista los cobros de socios del mes");
+const firstPick = page.getByRole("checkbox").first();
+if (await firstPick.count()) {
+  await firstPick.check();
+  const bar = page.getByRole("region", { name: "Cobros elegidos" });
+  await bar.getByRole("button", { name: "Mover a ese mes" }).waitFor();
+  check(true, "al elegir cobros aparece la barra para moverlos de mes");
+}
 // Saldo inicial editable: se puede arrancar el mes en cero.
+await page.goto(BASE + "/barberos");
+await page.getByRole("heading", { name: new RegExp(`A pagar · ${MES}`, "i") }).waitFor();
 await lucioPay.getByText(/Editar el saldo de arranque/).click();
 await lucioPay.getByLabel(/Saldo con el que arranca/).fill("0");
 await lucioPay.getByRole("button", { name: "Guardar saldo inicial" }).click();
